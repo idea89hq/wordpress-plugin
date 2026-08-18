@@ -5,7 +5,7 @@ Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -123,10 +123,18 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 
 == Changelog ==
 
+= 1.0.1 =
+* The "WooCommerce required" notice now appears only on the dashboard and plugins screens, and can be dismissed, instead of showing on every admin page.
+* Declares its WooCommerce dependency through the Requires Plugins header on WordPress 6.5 and later.
+* Documents the assistant's footer label and why the widget is served from IDEA89 rather than bundled.
+
 = 1.0.0 =
 * Initial release. Catalogue, category, page, coupon, FAQ and content sync; storefront chat widget with WooCommerce Store API add-to-cart; admin settings with Test Connection and Sync Now.
 
 == Upgrade Notice ==
+
+= 1.0.1 =
+Admin housekeeping and clearer documentation. No changes to syncing or to the storefront widget.
 
 = 1.0.0 =
 Initial release.
