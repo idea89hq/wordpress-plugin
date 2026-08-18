@@ -21,12 +21,21 @@
     }
   },
   "autoload-dev": {
-    "psr-4": { "Idea89\\Tests\\": "tests/" }
+    "psr-4": {
+      "Idea89\\Tests\\": "tests/"
+    }
   },
   "scripts": {
-    "lint:php74": "docker run --rm -v \"$PWD\":/app:ro -w /app php:7.4-cli sh -c 'find . -path ./vendor -prune -o -name \"*.php\" -print0 | xargs -0 -n1 -P4 php -l'"
+    "lint:php74": "docker run --rm -v \"$PWD\":/app:ro -w /app php:7.4-cli sh -c 'find . -path ./vendor -prune -o -name \"*.php\" -print0 | xargs -0 -n1 -P4 php -l'",
+    "lint:php84": "docker run --rm -v \"$PWD\":/app:ro -w /app php:8.4-cli sh -c 'find . -path ./vendor -prune -o -name \"*.php\" -print0 | xargs -0 -n1 -P4 php -l'",
+    "lint:php": [
+      "@lint:php74",
+      "@lint:php84"
+    ]
   },
   "scripts-descriptions": {
-    "lint:php74": "Parses every tracked PHP file under a real PHP 7.4 CLI (via Docker) to catch PHP 8-only syntax that phpcompatibility 9.3.5 cannot detect."
+    "lint:php74": "Parses every tracked PHP file under a real PHP 7.4 CLI (via Docker) to catch PHP 8-only syntax that phpcompatibility 9.3.5 cannot detect.",
+    "lint:php84": "Parses every tracked PHP file under a real PHP 8.4 CLI (via Docker) to prove the source is valid on the newest supported runtime.",
+    "lint:php": "Runs both parser gates, proving the source is valid across the whole supported range (7.4 to 8.4)."
   }
 }

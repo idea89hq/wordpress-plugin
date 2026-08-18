@@ -6,7 +6,7 @@ Turn your WooCommerce storefront into a conversion machine. IDEA89 adds an AI-po
 
 [![WordPress](https://img.shields.io/badge/WordPress-6.4+-blue)](https://wordpress.org)
 [![WooCommerce](https://img.shields.io/badge/WooCommerce-8.0+-96588a)](https://woocommerce.com)
-[![PHP](https://img.shields.io/badge/PHP-7.4%E2%80%938.3-blue)](https://php.net)
+[![PHP](https://img.shields.io/badge/PHP-7.4%E2%80%938.4-blue)](https://php.net)
 [![License](https://img.shields.io/badge/License-GPL--2.0--or--later-green)](LICENSE)
 
 ---
@@ -40,7 +40,7 @@ Your catalogue is embedded for hybrid search on the IDEA89 side. When a shopper 
 
 - WordPress 6.4 or later
 - WooCommerce 8.0 or later (tested up to 11.0)
-- PHP 7.4, 8.0, 8.1, 8.2, or 8.3
+- PHP 7.4, 8.0, 8.1, 8.2, 8.3, or 8.4
 - An IDEA89 account — [start your free trial](https://app.idea89.com/sign-up)
 
 ## Installation

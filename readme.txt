@@ -69,6 +69,11 @@ Full terms and privacy policy for the IDEA89 service: [Terms of Service](https:/
 
 == Frequently Asked Questions ==
 
+= Which PHP versions are supported? =
+
+PHP 7.4 through 8.4. The plugin source is parsed under both a real PHP 7.4 and a real PHP 8.4 runtime before every release, and the test suite is run with deprecations, notices and warnings all treated as failures, so it stays clean on the newest PHP as well as the oldest supported one.
+
+
 = Does this cost anything? =
 
 The plugin itself is free. It connects to the IDEA89 SaaS service, which is a paid product with a free trial. See the **External services** section for what's sent and to which service, and https://idea89.com for current pricing.

@@ -54,6 +54,13 @@ class Idea89_Admin_Settings {
 			return;
 		}
 
+		wp_enqueue_style(
+			'idea89-admin',
+			IDEA89_PLUGIN_URL . 'assets/css/admin.css',
+			array(),
+			IDEA89_VERSION
+		);
+
 		wp_enqueue_script(
 			'idea89-admin',
 			IDEA89_PLUGIN_URL . 'assets/js/admin.js',
@@ -511,6 +518,7 @@ class Idea89_Admin_Settings {
 		?>
 		<div class="wrap">
 			<h1><?php echo esc_html__( 'IDEA89 Assistant', 'idea89-assistant' ); ?></h1>
+			<?php $this->render_brand_strip(); ?>
 			<form action="options.php" method="post">
 				<?php
 				settings_fields( self::OPTION_GROUP );
@@ -529,6 +537,153 @@ class Idea89_Admin_Settings {
 				</button>
 			</p>
 			<div id="idea89-action-result" role="status" aria-live="polite"></div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * The lightbulb mark, inlined so the strip renders without an asset
+	 * round-trip and survives any admin theme.
+	 *
+	 * @return string
+	 */
+	private function brand_mark() {
+		return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="38" height="38"'
+			. ' fill="none" stroke="#0b6b47" stroke-width="1.5" stroke-linecap="round"'
+			. ' stroke-linejoin="round" aria-hidden="true" focusable="false">'
+			. '<g><line x1="12" y1="1" x2="12" y2="3"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>'
+			. '<line x1="1" y1="12" x2="3" y2="12"/><line x1="19.78" y1="4.22" x2="18.36" y2="5.64"/>'
+			. '<line x1="21" y1="12" x2="23" y2="12"/></g>'
+			. '<path d="M9 21h6M10 17h4M12 3a6 6 0 0 0-4 10.5V16a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.5A6 6 0 0 0 12 3z"/>'
+			. '<rect x="9" y="17" width="6" height="2" rx="1" fill="#4a5552" stroke="none"/>'
+			. '</svg>';
+	}
+
+	/**
+	 * SVG tags and attributes permitted in the brand mark.
+	 *
+	 * The mark is a constant we author, but it still goes through wp_kses so
+	 * the escaping is real rather than a suppressed warning.
+	 *
+	 * @return array
+	 */
+	private function brand_mark_allowed_html() {
+		$shared = array(
+			'fill'            => true,
+			'stroke'          => true,
+			'stroke-width'    => true,
+			'stroke-linecap'  => true,
+			'stroke-linejoin' => true,
+		);
+
+		return array(
+			'svg'  => array_merge(
+				$shared,
+				array(
+					'xmlns'       => true,
+					'viewbox'     => true,
+					'width'       => true,
+					'height'      => true,
+					'aria-hidden' => true,
+					'focusable'   => true,
+				)
+			),
+			'g'    => $shared,
+			'path' => array_merge( $shared, array( 'd' => true ) ),
+			'line' => array_merge(
+				$shared,
+				array(
+					'x1' => true,
+					'y1' => true,
+					'x2' => true,
+					'y2' => true,
+				)
+			),
+			'rect' => array_merge(
+				$shared,
+				array(
+					'x'      => true,
+					'y'      => true,
+					'width'  => true,
+					'height' => true,
+					'rx'     => true,
+				)
+			),
+		);
+	}
+
+	/**
+	 * Vendor brand strip shown above the settings.
+	 *
+	 * Mirrors the strip the Magento 2 module renders above its configuration
+	 * section, so a merchant running both products sees one identity rather
+	 * than two unrelated plugins.
+	 *
+	 * @return void
+	 */
+	private function render_brand_strip() {
+		$links = array(
+			array(
+				'url'      => 'https://idea89.com/docs',
+				'label'    => __( 'Documentation', 'idea89-assistant' ),
+				'external' => true,
+			),
+			array(
+				'url'      => 'https://idea89.com',
+				'label'    => __( 'Website', 'idea89-assistant' ),
+				'external' => true,
+			),
+			array(
+				'url'      => 'mailto:support@idea89.com',
+				'label'    => __( 'Support', 'idea89-assistant' ),
+				'external' => false,
+			),
+			array(
+				'url'      => 'https://app.idea89.com',
+				'label'    => __( 'Open dashboard', 'idea89-assistant' ),
+				'external' => true,
+			),
+		);
+		?>
+		<div class="idea89-brand">
+			<a class="idea89-brand__mark"
+				href="https://idea89.com"
+				target="_blank"
+				rel="noopener noreferrer"
+				title="<?php echo esc_attr__( 'Visit idea89.com', 'idea89-assistant' ); ?>">
+				<?php echo wp_kses( $this->brand_mark(), $this->brand_mark_allowed_html() ); ?>
+			</a>
+			<div class="idea89-brand__body">
+				<div class="idea89-brand__title">
+					<?php echo esc_html__( 'IDEA89 — AI Shopping Assistant', 'idea89-assistant' ); ?>
+					<span class="idea89-brand__version">
+						<?php
+						printf(
+							/* translators: %s: plugin version number */
+							esc_html__( 'v%s', 'idea89-assistant' ),
+							esc_html( IDEA89_VERSION )
+						);
+						?>
+					</span>
+				</div>
+				<div class="idea89-brand__tagline">
+					<?php echo esc_html__( 'Your storefront, now fluent in shopper.', 'idea89-assistant' ); ?>
+				</div>
+				<div class="idea89-brand__links">
+					<?php foreach ( $links as $i => $link ) : ?>
+						<?php if ( $i > 0 ) : ?>
+							<span class="idea89-brand__sep">&middot;</span>
+						<?php endif; ?>
+						<a href="<?php echo esc_url( $link['url'] ); ?>"
+							<?php echo $link['external'] ? 'target="_blank" rel="noopener noreferrer"' : ''; ?>>
+							<?php
+							echo esc_html( $link['label'] );
+							echo $link['external'] ? ' &#8599;' : '';
+							?>
+						</a>
+					<?php endforeach; ?>
+				</div>
+			</div>
 		</div>
 		<?php
 	}
