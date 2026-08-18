@@ -15,6 +15,17 @@ class Idea89_Plugin {
 	const MIN_WC_VERSION = '8.0.0';
 
 	/**
+	 * Admin screens allowed to show the "WooCommerce missing" notice.
+	 *
+	 * The plugin's own pages are never registered when requirements fail, so
+	 * the dashboard and the plugins list are the only screens a merchant can
+	 * act from.
+	 *
+	 * @var string[]
+	 */
+	const NOTICE_SCREENS = array( 'dashboard', 'dashboard-network', 'plugins', 'plugins-network' );
+
+	/**
 	 * Singleton instance.
 	 *
 	 * @var Idea89_Plugin|null
@@ -111,12 +122,47 @@ class Idea89_Plugin {
 	}
 
 	/**
+	 * Decides whether the "WooCommerce missing" notice belongs on this screen.
+	 *
+	 * WordPress.org guideline 11 forbids nagging on every admin page, so the
+	 * notice is limited to the screens a merchant can act from: the dashboard
+	 * and the plugins list. The plugin's own pages never register while
+	 * requirements fail, so they cannot appear here.
+	 *
+	 * @param string $screen_id Current admin screen id, '' when unknown.
+	 * @return bool
+	 */
+	public static function should_show_requirements_notice( $screen_id ) {
+		$screen_id = (string) $screen_id;
+
+		if ( '' === $screen_id ) {
+			return false;
+		}
+
+		return in_array( $screen_id, self::NOTICE_SCREENS, true );
+	}
+
+	/**
 	 * Admin notice shown when requirements are not met.
 	 *
 	 * @return void
 	 */
 	public function render_requirements_notice() {
-		echo '<div class="notice notice-error"><p>';
+		$screen_id = '';
+
+		if ( function_exists( 'get_current_screen' ) ) {
+			$screen = get_current_screen();
+
+			if ( $screen instanceof \WP_Screen ) {
+				$screen_id = (string) $screen->id;
+			}
+		}
+
+		if ( ! self::should_show_requirements_notice( $screen_id ) ) {
+			return;
+		}
+
+		echo '<div class="notice notice-error is-dismissible"><p>';
 		echo esc_html(
 			sprintf(
 				/* translators: %s: minimum WooCommerce version */

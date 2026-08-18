@@ -6,6 +6,7 @@
  * Version:           1.0.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
+ * Requires Plugins:  woocommerce
  * Author:            4K Technologies Ltd
  * Author URI:        https://idea89.com
  * License:           GPL-2.0-or-later

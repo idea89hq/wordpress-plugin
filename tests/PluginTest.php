@@ -31,4 +31,39 @@ class PluginTest extends TestCase {
 		$this->assertFalse( Idea89_Plugin::requirements_met( null ) );
 		$this->assertFalse( Idea89_Plugin::requirements_met( '' ) );
 	}
+
+	public function test_requirements_notice_shows_on_actionable_screens() {
+		$this->assertTrue( Idea89_Plugin::should_show_requirements_notice( 'dashboard' ) );
+		$this->assertTrue( Idea89_Plugin::should_show_requirements_notice( 'plugins' ) );
+		$this->assertTrue( Idea89_Plugin::should_show_requirements_notice( 'plugins-network' ) );
+	}
+
+	/**
+	 * wordpress.org guideline 11: no sitewide nagging. The notice must stay off
+	 * screens the merchant cannot act from, however many admin pages exist.
+	 */
+	public function test_requirements_notice_is_not_sitewide() {
+		$elsewhere = array( 'edit-post', 'post', 'upload', 'options-general', 'users', 'themes', 'edit-page', 'woocommerce_page_wc-settings', '' );
+
+		foreach ( $elsewhere as $screen_id ) {
+			$this->assertFalse(
+				Idea89_Plugin::should_show_requirements_notice( $screen_id ),
+				"Notice must not render on screen '{$screen_id}'"
+			);
+		}
+	}
+
+	/**
+	 * Guideline 11 also requires sitewide notices be dismissible. Ours is
+	 * scoped, but it carries is-dismissible so it can always be closed.
+	 */
+	public function test_requirements_notice_markup_is_dismissible() {
+		$source = file_get_contents( IDEA89_PLUGIN_DIR . 'includes/class-idea89-plugin.php' );
+
+		$this->assertStringContainsString(
+			'notice notice-error is-dismissible',
+			$source,
+			'The requirements notice must be dismissible.'
+		);
+	}
 }

@@ -4,6 +4,7 @@ Tags: ai, chatbot, woocommerce, product recommendations, customer support
 Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 7.4
+Requires Plugins: woocommerce
 Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -12,25 +13,27 @@ An AI shopping assistant for WooCommerce. Answers product and policy questions, 
 
 == Description ==
 
-IDEA89 adds a floating chat widget to your WooCommerce storefront. Shoppers ask it questions in plain language — "what's waterproof under £50?", "do you ship to Ireland?", "what's your return policy?" — and it answers from your actual catalogue and site content, then adds the right product straight to the basket when asked.
+IDEA89 adds a floating chat widget to your WooCommerce storefront. Shoppers ask it questions in plain language, "what's waterproof under £50?", "do you ship to Ireland?", "what's your return policy?", and it answers from your actual catalogue and site content, then adds the right product straight to the basket when asked.
 
-The plugin's job is entirely on the WordPress side: it reads your store and keeps a copy of it in sync with the IDEA89 service, and it prints a small loader script that renders the chat widget on the storefront. All of the AI itself — understanding the question, searching your catalogue, generating the reply — runs on IDEA89's servers, not on your WordPress install. See **External services** below for exactly what that means for your data.
+The plugin's job is entirely on the WordPress side: it reads your store and keeps a copy of it in sync with the IDEA89 service, and it prints a small loader script that renders the chat widget on the storefront. All of the AI itself (understanding the question, searching your catalogue, generating the reply) runs on IDEA89's servers, not on your WordPress install. See **External services** below for exactly what that means for your data.
 
 = What it syncs =
 
-* **Products** — name, description, price, images, categories, attributes, variations, stock levels, and review excerpts
-* **Categories** — so the assistant understands how your catalogue is organised
-* **Pages** — About, shipping, returns, and other policy pages, so the assistant can answer from them
-* **Coupons** — active, unexpired discount codes, so the assistant can mention live promotions
-* **Store details** — store name, currency, and the context you provide in settings
-* **FAQs** — auto-detected from your content (see Limitations below), with a settings screen to review what was found
-* **Posts and other public content types** — blog posts and any custom post type you opt in, indexed and searched rather than dumped into every reply, so a large blog doesn't overwhelm the assistant
+* **Products**: name, description, price, images, categories, attributes, variations, stock levels, and review excerpts
+* **Categories**: so the assistant understands how your catalogue is organised
+* **Pages**: About, shipping, returns, and other policy pages, so the assistant can answer from them
+* **Coupons**: active, unexpired discount codes, so the assistant can mention live promotions
+* **Store details**: store name, currency, and the context you provide in settings
+* **FAQs**: auto-detected from your content (see Limitations below), with a settings screen to review what was found
+* **Posts and other public content types**: blog posts and any custom post type you opt in, indexed and searched rather than dumped into every reply, so a large blog doesn't overwhelm the assistant
 
-Sync runs in the background via Action Scheduler (bundled with WooCommerce), triggered by product, stock, coupon and content saves, plus a daily full reconcile. Nothing runs until you enter an API key, and nothing blocks a page save waiting on a network call — every sync is queued and processed asynchronously.
+Sync runs in the background via Action Scheduler (bundled with WooCommerce), triggered by product, stock, coupon and content saves, plus a daily full reconcile. Nothing runs until you enter an API key, and nothing blocks a page save waiting on a network call. Every sync is queued and processed asynchronously.
 
 = What it adds to the storefront =
 
-A single, asynchronously-loaded script tag that renders the chat widget. It does not touch your theme, does not add page weight to the initial render, and adds products to the WooCommerce cart through the standard Store API — the same cart your theme already shows.
+A single, asynchronously-loaded script tag that renders the chat widget. It does not touch your theme, does not add page weight to the initial render, and adds products to the WooCommerce cart through the standard Store API, the same cart your theme already shows.
+
+The chat panel carries a small "idea89" label in its footer, linking to idea89.com. This is part of the hosted assistant's own interface, the same way an embedded video player carries its provider's mark, and is rendered by the IDEA89 service, not injected into your theme or content. It appears only inside the chat panel, and only when a shopper opens it.
 
 = What it does not do =
 
@@ -46,12 +49,14 @@ This plugin connects your store to the IDEA89 SaaS API at **api.idea89.com**, a 
 
 Once a key is configured, the following data is sent to api.idea89.com:
 
-* **Catalogue data** — product names, descriptions, prices, images (URLs), categories, attributes, variations, stock levels, and review excerpts, sent when a product is saved, when stock changes, and on a daily reconcile.
-* **Page and post content** — the text of WordPress pages and (if you opt in under Content Sync) posts and other public content types, sent when that content is saved or on the daily reconcile, so the assistant can answer questions from it.
-* **Coupon codes** — active, unexpired coupon codes and their terms, so the assistant can mention live promotions.
-* **Store details** — your store name, currency, and any store-context text you enter in Settings.
-* **Shopper chat messages** — when a visitor uses the widget, their messages are sent directly from their browser to api.idea89.com to generate a reply. This traffic does not pass through your WordPress server.
+* **Catalogue data**: product names, descriptions, prices, images (URLs), categories, attributes, variations, stock levels, and review excerpts, sent when a product is saved, when stock changes, and on a daily reconcile.
+* **Page and post content**: the text of WordPress pages and (if you opt in under Content Sync) posts and other public content types, sent when that content is saved or on the daily reconcile, so the assistant can answer questions from it.
+* **Coupon codes**: active, unexpired coupon codes and their terms, so the assistant can mention live promotions.
+* **Store details**: your store name, currency, and any store-context text you enter in Settings.
+* **Shopper chat messages**: when a visitor uses the widget, their messages are sent directly from their browser to api.idea89.com to generate a reply. This traffic does not pass through your WordPress server.
 * **Your site's domain and your API key**, sent with every request, so IDEA89 can identify which store the data belongs to.
+
+The widget itself is served from api.idea89.com rather than bundled into the plugin, because the assistant's interface is part of the hosted service and is updated centrally. The plugin prints only the loader tag and your public configuration.
 
 No data is sent for training third-party AI models on other customers' behalf, and the plugin never transmits WordPress user accounts, passwords, or payment details.
 
@@ -60,12 +65,12 @@ Full terms and privacy policy for the IDEA89 service: [Terms of Service](https:/
 == Installation ==
 
 1. Upload the plugin to `/wp-content/plugins/`, or install it through the WordPress admin under Plugins > Add New > Upload Plugin.
-2. Activate the plugin. WooCommerce 8.0 or later must already be installed and active — if it isn't, the plugin shows an admin notice and stays inactive rather than causing errors.
+2. Activate the plugin. WooCommerce 8.0 or later must already be installed and active. If it isn't, the plugin shows an admin notice and stays inactive rather than causing errors.
 3. Go to **IDEA89** in the admin menu.
 4. Paste the API key from your [IDEA89 dashboard](https://app.idea89.com) and save.
 5. Tick **Enable assistant**, choose what to sync under Content Sync, and save again.
 6. Click **Sync now** to push your catalogue immediately, or wait for the background sync to pick it up.
-7. Visit your storefront — the chat widget appears in the corner you configured.
+7. Visit your storefront. The chat widget appears in the corner you configured.
 
 == Frequently Asked Questions ==
 
@@ -80,7 +85,7 @@ The plugin itself is free. It connects to the IDEA89 SaaS service, which is a pa
 
 = Will this slow down my site? =
 
-The widget loads asynchronously in the footer, so it does not block the rest of the page from rendering. Catalogue and content sync run entirely in the background through Action Scheduler — they never run inline with a page request or an admin save.
+The widget loads asynchronously in the footer, so it does not block the rest of the page from rendering. Catalogue and content sync run entirely in the background through Action Scheduler, and never run inline with a page request or an admin save.
 
 = Does it work with variable products? =
 
@@ -92,7 +97,11 @@ Not automatically. FAQ detection looks for three things, in order: schema.org `F
 
 = What happens if I untick a content type? =
 
-Unticking a content type (a post type, categories, pages, store details, or FAQs) under Content Sync stops it being sent on future syncs. It does **not** retroactively remove content that was already sent and indexed — that content can still be quoted to shoppers until you remove it directly (for example, by unpublishing or deleting the underlying page or post, which does withdraw it).
+Unticking a content type (a post type, categories, pages, store details, or FAQs) under Content Sync stops it being sent on future syncs. It does **not** retroactively remove content that was already sent and indexed. That content can still be quoted to shoppers until you remove it directly (for example, by unpublishing or deleting the underlying page or post, which does withdraw it).
+
+= Can I remove the "idea89" label from the chat widget? =
+
+The label sits in the chat panel footer and is part of the hosted assistant's interface. Removing it is a white-label option, so ask us at support@idea89.com about your plan. The plugin itself adds no links, badges or credits anywhere else on your site, and nothing at all outside the chat panel.
 
 = Does it store anything in my WordPress database? =
 
@@ -100,7 +109,7 @@ Only its own settings (your API key, enabled/disabled state, appearance and cont
 
 = What happens if I deactivate or delete the plugin? =
 
-Deactivating stops the widget and all syncing immediately. Deleting the plugin (via `uninstall.php`) removes every option it created and unschedules any pending Action Scheduler jobs. It does not delete data already synced to the IDEA89 service — do that from your IDEA89 dashboard.
+Deactivating stops the widget and all syncing immediately. Deleting the plugin (via `uninstall.php`) removes every option it created and unschedules any pending Action Scheduler jobs. It does not delete data already synced to the IDEA89 service. Do that from your IDEA89 dashboard.
 
 = Does it support HPOS (High-Performance Order Storage)? =
 
@@ -109,7 +118,7 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 == Screenshots ==
 
 1. Chat widget on the storefront, answering a product question and offering to add it to the basket.
-2. IDEA89 admin settings — connection, appearance and content sync options.
+2. IDEA89 admin settings: connection, appearance and content sync options.
 3. Content Sync screen showing auto-detected FAQ sources.
 
 == Changelog ==
