@@ -54,6 +54,26 @@ class PluginTest extends TestCase {
 	}
 
 	/**
+	 * wordpress.org rejects a plugin whose Plugin URI and Author URI match:
+	 * one describes the plugin, the other describes who wrote it. Both were
+	 * https://idea89.com on 1.0.1 and the submission was refused for it.
+	 */
+	public function test_plugin_and_author_uris_differ() {
+		$header = file_get_contents( IDEA89_PLUGIN_DIR . 'idea89-assistant.php' );
+
+		preg_match( '/^\s*\*\s*Plugin URI:\s*(\S+)/mi', $header, $plugin_uri );
+		preg_match( '/^\s*\*\s*Author URI:\s*(\S+)/mi', $header, $author_uri );
+
+		$this->assertNotEmpty( $plugin_uri[1] ?? '', 'Plugin URI header is missing.' );
+		$this->assertNotEmpty( $author_uri[1] ?? '', 'Author URI header is missing.' );
+		$this->assertNotSame(
+			$plugin_uri[1],
+			$author_uri[1],
+			'Plugin URI and Author URI must be different pages.'
+		);
+	}
+
+	/**
 	 * Guideline 11 also requires sitewide notices be dismissible. Ours is
 	 * scoped, but it carries is-dismissible so it can always be closed.
 	 */

@@ -5,7 +5,7 @@ Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -123,6 +123,9 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 
 == Changelog ==
 
+= 1.0.2 =
+* The plugin and author links in the plugin header now point to different pages, as WordPress requires: the plugin link goes to the plugin's own repository, the author link to idea89.com.
+
 = 1.0.1 =
 * The "WooCommerce required" notice now appears only on the dashboard and plugins screens, and can be dismissed, instead of showing on every admin page.
 * Declares its WooCommerce dependency through the Requires Plugins header on WordPress 6.5 and later.
@@ -132,6 +135,9 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 * Initial release. Catalogue, category, page, coupon, FAQ and content sync; storefront chat widget with WooCommerce Store API add-to-cart; admin settings with Test Connection and Sync Now.
 
 == Upgrade Notice ==
+
+= 1.0.2 =
+Corrects the plugin header links. No functional change.
 
 = 1.0.1 =
 Admin housekeeping and clearer documentation. No changes to syncing or to the storefront widget.

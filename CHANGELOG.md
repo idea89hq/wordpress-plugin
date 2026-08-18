@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-08-18
+
+### Fixed
+- `Plugin URI` and `Author URI` were both `https://idea89.com`. WordPress
+  requires them to differ: the plugin URI describes this specific plugin, the
+  author URI describes who wrote it. `Plugin URI` now points at the plugin's
+  public repository; `Author URI` stays on idea89.com.
+
 ## [1.0.1] - 2026-08-18
 
 ### Changed
