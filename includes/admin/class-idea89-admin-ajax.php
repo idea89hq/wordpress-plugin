@@ -37,7 +37,7 @@ class Idea89_Admin_Ajax {
 		check_ajax_referer( self::NONCE_ACTION, 'nonce' );
 
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_send_json_error( array( 'message' => __( 'You do not have permission to do this.', 'idea89-assistant' ) ), 403 );
+			wp_send_json_error( array( 'message' => __( 'You do not have permission to do this.', 'idea89-ai-shopping-assistant' ) ), 403 );
 		}
 	}
 
@@ -52,7 +52,7 @@ class Idea89_Admin_Ajax {
 		$result = idea89_client()->test_connection();
 
 		if ( ! empty( $result['ok'] ) ) {
-			wp_send_json_success( array( 'message' => __( 'Connected. Your API key works.', 'idea89-assistant' ) ) );
+			wp_send_json_success( array( 'message' => __( 'Connected. Your API key works.', 'idea89-ai-shopping-assistant' ) ) );
 		}
 
 		wp_send_json_error( array( 'message' => $result['error'] ) );
@@ -67,14 +67,14 @@ class Idea89_Admin_Ajax {
 		$this->guard();
 
 		if ( ! idea89_config()->is_configured() ) {
-			wp_send_json_error( array( 'message' => __( 'Add your API key first.', 'idea89-assistant' ) ) );
+			wp_send_json_error( array( 'message' => __( 'Add your API key first.', 'idea89-ai-shopping-assistant' ) ) );
 		}
 
 		Idea89_Scheduler::enqueue( Idea89_Scheduler::HOOK_FULL_SYNC );
 
 		wp_send_json_success(
 			array(
-				'message' => __( 'Sync queued. Progress appears under WooCommerce > Status > Scheduled Actions.', 'idea89-assistant' ),
+				'message' => __( 'Sync queued. Progress appears under WooCommerce > Status > Scheduled Actions.', 'idea89-ai-shopping-assistant' ),
 			)
 		);
 	}

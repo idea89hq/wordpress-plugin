@@ -33,8 +33,8 @@ class Idea89_Admin_Settings {
 	 */
 	public function add_menu() {
 		add_menu_page(
-			__( 'IDEA89 Assistant', 'idea89-assistant' ),
-			__( 'IDEA89', 'idea89-assistant' ),
+			__( 'IDEA89 Assistant', 'idea89-ai-shopping-assistant' ),
+			__( 'IDEA89', 'idea89-ai-shopping-assistant' ),
 			'manage_options',
 			self::PAGE_SLUG,
 			array( $this, 'render_page' ),
@@ -75,11 +75,11 @@ class Idea89_Admin_Settings {
 			array(
 				'ajaxUrl'   => admin_url( 'admin-ajax.php' ),
 				'nonce'     => wp_create_nonce( 'idea89_admin' ),
-				'testing'   => __( 'Testing…', 'idea89-assistant' ),
-				'syncing'   => __( 'Starting sync…', 'idea89-assistant' ),
-				'testLabel' => __( 'Test connection', 'idea89-assistant' ),
-				'syncLabel' => __( 'Sync now', 'idea89-assistant' ),
-				'failed'    => __( 'Request failed. Check your connection and try again.', 'idea89-assistant' ),
+				'testing'   => __( 'Testing…', 'idea89-ai-shopping-assistant' ),
+				'syncing'   => __( 'Starting sync…', 'idea89-ai-shopping-assistant' ),
+				'testLabel' => __( 'Test connection', 'idea89-ai-shopping-assistant' ),
+				'syncLabel' => __( 'Sync now', 'idea89-ai-shopping-assistant' ),
+				'failed'    => __( 'Request failed. Check your connection and try again.', 'idea89-ai-shopping-assistant' ),
 			)
 		);
 	}
@@ -234,42 +234,42 @@ class Idea89_Admin_Settings {
 
 		add_settings_section(
 			'idea89_general',
-			__( 'Connection', 'idea89-assistant' ),
+			__( 'Connection', 'idea89-ai-shopping-assistant' ),
 			array( $this, 'render_general_intro' ),
 			self::PAGE_SLUG
 		);
 
-		$this->add_field( 'idea89_enabled', __( 'Enable assistant', 'idea89-assistant' ), 'checkbox', 'idea89_general' );
-		$this->add_field( 'idea89_api_key', __( 'API key', 'idea89-assistant' ), 'password', 'idea89_general' );
-		$this->add_field( 'idea89_api_url', __( 'API URL', 'idea89-assistant' ), 'text', 'idea89_general' );
+		$this->add_field( 'idea89_enabled', __( 'Enable assistant', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_general' );
+		$this->add_field( 'idea89_api_key', __( 'API key', 'idea89-ai-shopping-assistant' ), 'password', 'idea89_general' );
+		$this->add_field( 'idea89_api_url', __( 'API URL', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_general' );
 
 		add_settings_section(
 			'idea89_appearance',
-			__( 'Appearance', 'idea89-assistant' ),
+			__( 'Appearance', 'idea89-ai-shopping-assistant' ),
 			'__return_false',
 			self::PAGE_SLUG
 		);
 
-		$this->add_field( 'idea89_assistant_name', __( 'Assistant name', 'idea89-assistant' ), 'text', 'idea89_appearance' );
-		$this->add_field( 'idea89_widget_position', __( 'Position', 'idea89-assistant' ), 'position', 'idea89_appearance' );
-		$this->add_field( 'idea89_brand_color', __( 'Brand colour', 'idea89-assistant' ), 'text', 'idea89_appearance' );
-		$this->add_field( 'idea89_store_context', __( 'Store context', 'idea89-assistant' ), 'textarea', 'idea89_appearance' );
+		$this->add_field( 'idea89_assistant_name', __( 'Assistant name', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_appearance' );
+		$this->add_field( 'idea89_widget_position', __( 'Position', 'idea89-ai-shopping-assistant' ), 'position', 'idea89_appearance' );
+		$this->add_field( 'idea89_brand_color', __( 'Brand colour', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_appearance' );
+		$this->add_field( 'idea89_store_context', __( 'Store context', 'idea89-ai-shopping-assistant' ), 'textarea', 'idea89_appearance' );
 
 		add_settings_section(
 			'idea89_content',
-			__( 'Content sync', 'idea89-assistant' ),
+			__( 'Content sync', 'idea89-ai-shopping-assistant' ),
 			array( $this, 'render_content_intro' ),
 			self::PAGE_SLUG
 		);
 
-		$this->add_field( 'idea89_sync_categories', __( 'Product categories', 'idea89-assistant' ), 'checkbox', 'idea89_content' );
-		$this->add_field( 'idea89_sync_pages', __( 'Pages', 'idea89-assistant' ), 'checkbox', 'idea89_content' );
-		$this->add_field( 'idea89_sync_store_info', __( 'Store details', 'idea89-assistant' ), 'checkbox', 'idea89_content' );
-		$this->add_field( 'idea89_sync_faqs', __( 'FAQs', 'idea89-assistant' ), 'checkbox', 'idea89_content' );
+		$this->add_field( 'idea89_sync_categories', __( 'Product categories', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_content' );
+		$this->add_field( 'idea89_sync_pages', __( 'Pages', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_content' );
+		$this->add_field( 'idea89_sync_store_info', __( 'Store details', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_content' );
+		$this->add_field( 'idea89_sync_faqs', __( 'FAQs', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_content' );
 
 		add_settings_field(
 			'idea89_sync_post_types',
-			__( 'Posts and other content', 'idea89-assistant' ),
+			__( 'Posts and other content', 'idea89-ai-shopping-assistant' ),
 			array( $this, 'render_post_types_field' ),
 			self::PAGE_SLUG,
 			'idea89_content'
@@ -284,7 +284,7 @@ class Idea89_Admin_Settings {
 	 * @return void
 	 */
 	public function render_content_intro() {
-		echo '<p>' . esc_html__( 'Choose what the assistant can read. Posts and custom content are indexed and searched, so a large blog is fine.', 'idea89-assistant' ) . '</p>';
+		echo '<p>' . esc_html__( 'Choose what the assistant can read. Posts and custom content are indexed and searched, so a large blog is fine.', 'idea89-ai-shopping-assistant' ) . '</p>';
 
 		// Honesty requirement: a post type (or category/page/store-info sync)
 		// switched off here is not retroactively pruned from the index —
@@ -293,7 +293,7 @@ class Idea89_Admin_Settings {
 		// type; nothing yet calls delete_documents() for content that drops
 		// out of the selection. The merchant needs to know that before they
 		// assume unchecking a box makes the assistant forget something.
-		echo '<p class="description">' . esc_html__( 'Turning a content type off only stops future syncing. Documents already indexed from that type are not automatically removed, and can keep being quoted to shoppers until that support ships.', 'idea89-assistant' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Turning a content type off only stops future syncing. Documents already indexed from that type are not automatically removed, and can keep being quoted to shoppers until that support ships.', 'idea89-ai-shopping-assistant' ) . '</p>';
 
 		$sources = idea89_faq_syncer()->detect_sources();
 
@@ -306,24 +306,24 @@ class Idea89_Admin_Settings {
 			// than none. A merchant whose FAQs live only in such an accordion
 			// must be told plainly what was checked, not left assuming the
 			// store simply has no FAQs.
-			echo '<p><em>' . esc_html__( 'No FAQs detected yet. Detection checks FAQ plugin post types, FAQ schema markup (as emitted by Yoast and Rank Math), and native accordion (details/summary) blocks. It does not read theme-specific accordion markup built from plain divs, so a page whose FAQs live only in a theme accordion will show nothing here even though the FAQs exist. If that sounds like your site, add an FAQ block or a small FAQ plugin so the assistant can find them.', 'idea89-assistant' ) . '</em></p>';
+			echo '<p><em>' . esc_html__( 'No FAQs detected yet. Detection checks FAQ plugin post types, FAQ schema markup (as emitted by Yoast and Rank Math), and native accordion (details/summary) blocks. It does not read theme-specific accordion markup built from plain divs, so a page whose FAQs live only in a theme accordion will show nothing here even though the FAQs exist. If that sounds like your site, add an FAQ block or a small FAQ plugin so the assistant can find them.', 'idea89-ai-shopping-assistant' ) . '</em></p>';
 			return;
 		}
 
-		echo '<p><strong>' . esc_html__( 'FAQ sources detected:', 'idea89-assistant' ) . '</strong> ';
+		echo '<p><strong>' . esc_html__( 'FAQ sources detected:', 'idea89-ai-shopping-assistant' ) . '</strong> ';
 
 		$labels = array();
 		foreach ( $sources['post_types'] as $type ) {
 			$labels[] = sprintf(
 				/* translators: %s: post type slug */
-				__( '%s post type', 'idea89-assistant' ),
+				__( '%s post type', 'idea89-ai-shopping-assistant' ),
 				$type
 			);
 		}
 		if ( ! empty( $sources['html_pages'] ) ) {
 			$labels[] = sprintf(
 				/* translators: %d: number of pages */
-				_n( '%d page with FAQ markup', '%d pages with FAQ markup', count( $sources['html_pages'] ), 'idea89-assistant' ),
+				_n( '%d page with FAQ markup', '%d pages with FAQ markup', count( $sources['html_pages'] ), 'idea89-ai-shopping-assistant' ),
 				count( $sources['html_pages'] )
 			);
 		}
@@ -333,7 +333,7 @@ class Idea89_Admin_Settings {
 		// Same honesty point as above, phrased for the "we found something"
 		// case: detection succeeding here is not proof that every FAQ on the
 		// site was found, only that these particular sources were.
-		echo '<p class="description">' . esc_html__( 'This does not include theme-specific accordion markup built from plain divs.', 'idea89-assistant' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'This does not include theme-specific accordion markup built from plain divs.', 'idea89-ai-shopping-assistant' ) . '</p>';
 	}
 
 	/**
@@ -348,7 +348,7 @@ class Idea89_Admin_Settings {
 		$selected  = idea89_document_syncer()->synced_post_types();
 
 		if ( empty( $available ) ) {
-			echo '<p>' . esc_html__( 'No eligible content types found.', 'idea89-assistant' ) . '</p>';
+			echo '<p>' . esc_html__( 'No eligible content types found.', 'idea89-ai-shopping-assistant' ) . '</p>';
 			return;
 		}
 
@@ -374,7 +374,7 @@ class Idea89_Admin_Settings {
 			);
 		}
 
-		echo '<p class="description">' . esc_html__( 'Products are always synced separately and are not listed here.', 'idea89-assistant' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Products are always synced separately and are not listed here.', 'idea89-ai-shopping-assistant' ) . '</p>';
 	}
 
 	/**
@@ -436,7 +436,7 @@ class Idea89_Admin_Settings {
 	 * @return void
 	 */
 	public function render_general_intro() {
-		echo '<p>' . esc_html__( 'Paste the API key from your IDEA89 dashboard. No data leaves this site until a key is saved.', 'idea89-assistant' ) . '</p>';
+		echo '<p>' . esc_html__( 'Paste the API key from your IDEA89 dashboard. No data leaves this site until a key is saved.', 'idea89-ai-shopping-assistant' ) . '</p>';
 	}
 
 	/**
@@ -480,8 +480,8 @@ class Idea89_Admin_Settings {
 			case 'position':
 				echo '<select name="' . esc_attr( $name ) . '">';
 				foreach ( array(
-					'bottom-right' => __( 'Bottom right', 'idea89-assistant' ),
-					'bottom-left'  => __( 'Bottom left', 'idea89-assistant' ),
+					'bottom-right' => __( 'Bottom right', 'idea89-ai-shopping-assistant' ),
+					'bottom-left'  => __( 'Bottom left', 'idea89-ai-shopping-assistant' ),
 				) as $key => $label ) {
 					printf(
 						'<option value="%1$s" %2$s>%3$s</option>',
@@ -517,7 +517,7 @@ class Idea89_Admin_Settings {
 		}
 		?>
 		<div class="wrap">
-			<h1><?php echo esc_html__( 'IDEA89 Assistant', 'idea89-assistant' ); ?></h1>
+			<h1><?php echo esc_html__( 'IDEA89 Assistant', 'idea89-ai-shopping-assistant' ); ?></h1>
 			<?php $this->render_brand_strip(); ?>
 			<form action="options.php" method="post">
 				<?php
@@ -527,13 +527,13 @@ class Idea89_Admin_Settings {
 				?>
 			</form>
 
-			<h2><?php echo esc_html__( 'Actions', 'idea89-assistant' ); ?></h2>
+			<h2><?php echo esc_html__( 'Actions', 'idea89-ai-shopping-assistant' ); ?></h2>
 			<p>
 				<button type="button" class="button" id="idea89-test-connection">
-					<?php echo esc_html__( 'Test connection', 'idea89-assistant' ); ?>
+					<?php echo esc_html__( 'Test connection', 'idea89-ai-shopping-assistant' ); ?>
 				</button>
 				<button type="button" class="button button-primary" id="idea89-sync-now">
-					<?php echo esc_html__( 'Sync now', 'idea89-assistant' ); ?>
+					<?php echo esc_html__( 'Sync now', 'idea89-ai-shopping-assistant' ); ?>
 				</button>
 			</p>
 			<div id="idea89-action-result" role="status" aria-live="polite"></div>
@@ -625,22 +625,22 @@ class Idea89_Admin_Settings {
 		$links = array(
 			array(
 				'url'      => 'https://idea89.com/docs',
-				'label'    => __( 'Documentation', 'idea89-assistant' ),
+				'label'    => __( 'Documentation', 'idea89-ai-shopping-assistant' ),
 				'external' => true,
 			),
 			array(
 				'url'      => 'https://idea89.com',
-				'label'    => __( 'Website', 'idea89-assistant' ),
+				'label'    => __( 'Website', 'idea89-ai-shopping-assistant' ),
 				'external' => true,
 			),
 			array(
 				'url'      => 'mailto:support@idea89.com',
-				'label'    => __( 'Support', 'idea89-assistant' ),
+				'label'    => __( 'Support', 'idea89-ai-shopping-assistant' ),
 				'external' => false,
 			),
 			array(
 				'url'      => 'https://app.idea89.com',
-				'label'    => __( 'Open dashboard', 'idea89-assistant' ),
+				'label'    => __( 'Open dashboard', 'idea89-ai-shopping-assistant' ),
 				'external' => true,
 			),
 		);
@@ -650,24 +650,24 @@ class Idea89_Admin_Settings {
 				href="https://idea89.com"
 				target="_blank"
 				rel="noopener noreferrer"
-				title="<?php echo esc_attr__( 'Visit idea89.com', 'idea89-assistant' ); ?>">
+				title="<?php echo esc_attr__( 'Visit idea89.com', 'idea89-ai-shopping-assistant' ); ?>">
 				<?php echo wp_kses( $this->brand_mark(), $this->brand_mark_allowed_html() ); ?>
 			</a>
 			<div class="idea89-brand__body">
 				<div class="idea89-brand__title">
-					<?php echo esc_html__( 'IDEA89 — AI Shopping Assistant', 'idea89-assistant' ); ?>
+					<?php echo esc_html__( 'IDEA89 — AI Shopping Assistant', 'idea89-ai-shopping-assistant' ); ?>
 					<span class="idea89-brand__version">
 						<?php
 						printf(
 							/* translators: %s: plugin version number */
-							esc_html__( 'v%s', 'idea89-assistant' ),
+							esc_html__( 'v%s', 'idea89-ai-shopping-assistant' ),
 							esc_html( IDEA89_VERSION )
 						);
 						?>
 					</span>
 				</div>
 				<div class="idea89-brand__tagline">
-					<?php echo esc_html__( 'Your storefront, now fluent in shopper.', 'idea89-assistant' ); ?>
+					<?php echo esc_html__( 'Your storefront, now fluent in shopper.', 'idea89-ai-shopping-assistant' ); ?>
 				</div>
 				<div class="idea89-brand__links">
 					<?php foreach ( $links as $i => $link ) : ?>

@@ -439,6 +439,7 @@ class Idea89_Content_Syncer {
 				// an unrelated plugin throwing must not take the whole batch down
 				// with it, so fall back to the raw content instead of losing the
 				// page entirely.
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core filter, applied to render post content; not a hook this plugin defines.
 				$rendered = apply_filters( 'the_content', $rendered );
 			} catch ( Throwable $e ) {
 				$this->log( 'the_content filter failed for page ' . $page->ID . ': ' . $e->getMessage() );

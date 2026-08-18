@@ -16,7 +16,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-SLUG="idea89-assistant"
+SLUG="idea89-ai-shopping-assistant"
 BUILD_DIR="$(mktemp -d)"
 STAGE_DIR="${BUILD_DIR}/${SLUG}"
 OUT_ZIP="$(pwd)/${SLUG}.zip"

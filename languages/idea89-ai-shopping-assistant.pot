@@ -3,7 +3,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: IDEA89 AI Shopping Assistant 1.0.0\n"
-"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/idea89-assistant\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/idea89-ai-shopping-assistant\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
@@ -12,7 +12,7 @@ msgstr ""
 "POT-Creation-Date: 2026-08-18T03:15:27+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
-"X-Domain: idea89-assistant\n"
+"X-Domain: idea89-ai-shopping-assistant\n"
 
 #. Plugin Name of the plugin
 #: idea89-assistant.php

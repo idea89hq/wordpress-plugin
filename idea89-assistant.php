@@ -3,7 +3,7 @@
  * Plugin Name:       IDEA89 AI Shopping Assistant
  * Plugin URI:        https://github.com/idea89hq/wordpress-plugin
  * Description:       AI shopping assistant for WooCommerce. Answers product and policy questions, recommends products from your catalogue, and adds them to the basket.
- * Version:           1.0.2
+ * Version:           1.0.3
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
@@ -11,7 +11,7 @@
  * Author URI:        https://idea89.com
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain:       idea89-assistant
+ * Text Domain:       idea89-ai-shopping-assistant
  * Domain Path:       /languages
  * WC requires at least: 8.0
  * WC tested up to:   11.0
@@ -21,7 +21,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'IDEA89_VERSION', '1.0.2' );
+define( 'IDEA89_VERSION', '1.0.3' );
 define( 'IDEA89_PLUGIN_FILE', __FILE__ );
 define( 'IDEA89_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'IDEA89_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

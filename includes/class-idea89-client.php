@@ -293,7 +293,7 @@ class Idea89_Client {
 		if ( ! $this->config->is_configured() ) {
 			return array(
 				'ok'    => false,
-				'error' => __( 'No API key configured.', 'idea89-assistant' ),
+				'error' => __( 'No API key configured.', 'idea89-ai-shopping-assistant' ),
 			);
 		}
 
@@ -314,7 +314,7 @@ class Idea89_Client {
 				'ok'    => false,
 				'error' => sprintf(
 					/* translators: %s: error message */
-					__( 'Connection failed: %s', 'idea89-assistant' ),
+					__( 'Connection failed: %s', 'idea89-ai-shopping-assistant' ),
 					$response->get_error_message()
 				),
 			);
@@ -336,7 +336,7 @@ class Idea89_Client {
 				'ok'    => false,
 				'error' => sprintf(
 					/* translators: %d: HTTP status code */
-					__( 'API key rejected (HTTP %d). Check your key.', 'idea89-assistant' ),
+					__( 'API key rejected (HTTP %d). Check your key.', 'idea89-ai-shopping-assistant' ),
 					$code
 				),
 			);
@@ -346,7 +346,7 @@ class Idea89_Client {
 			'ok'    => false,
 			'error' => sprintf(
 				/* translators: %d: HTTP status code */
-				__( 'API returned HTTP %d. Check your API URL and key.', 'idea89-assistant' ),
+				__( 'API returned HTTP %d. Check your API URL and key.', 'idea89-ai-shopping-assistant' ),
 				$code
 			),
 		);

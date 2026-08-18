@@ -157,6 +157,7 @@ class Idea89_Document_Syncer {
 	private function render_content( $post ) {
 		$rendered = $post->post_content;
 		try {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core filter, applied to render post content; not a hook this plugin defines.
 			$rendered = apply_filters( 'the_content', $rendered );
 		} catch ( Throwable $e ) {
 			$this->log( 'the_content filter failed for post ' . $post->ID . ': ' . $e->getMessage() );

@@ -82,7 +82,9 @@ class Idea89_Plugin {
 			return;
 		}
 
-		load_plugin_textdomain( 'idea89-assistant', false, dirname( plugin_basename( IDEA89_PLUGIN_FILE ) ) . '/languages' );
+		// No load_plugin_textdomain() call: WordPress has loaded translations
+		// for wordpress.org-hosted plugins automatically since 4.6, and calling
+		// it this early triggers the _load_textdomain_just_in_time notice on 6.7+.
 
 		require_once IDEA89_PLUGIN_DIR . 'includes/class-idea89-config.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/class-idea89-client.php';
@@ -166,7 +168,7 @@ class Idea89_Plugin {
 		echo esc_html(
 			sprintf(
 				/* translators: %s: minimum WooCommerce version */
-				__( 'IDEA89 Assistant requires WooCommerce %s or newer. The plugin is inactive until WooCommerce is installed and updated.', 'idea89-assistant' ),
+				__( 'IDEA89 Assistant requires WooCommerce %s or newer. The plugin is inactive until WooCommerce is installed and updated.', 'idea89-ai-shopping-assistant' ),
 				self::MIN_WC_VERSION
 			)
 		);

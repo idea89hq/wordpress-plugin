@@ -5,7 +5,7 @@ Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -123,6 +123,10 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 
 == Changelog ==
 
+= 1.0.3 =
+* Text domain now matches the plugin slug, so WordPress can load translations for the plugin.
+* Removed the redundant load_plugin_textdomain() call.
+
 = 1.0.2 =
 * The plugin and author links in the plugin header now point to different pages, as WordPress requires: the plugin link goes to the plugin's own repository, the author link to idea89.com.
 
@@ -135,6 +139,9 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 * Initial release. Catalogue, category, page, coupon, FAQ and content sync; storefront chat widget with WooCommerce Store API add-to-cart; admin settings with Test Connection and Sync Now.
 
 == Upgrade Notice ==
+
+= 1.0.3 =
+Translation loading fix. No changes to syncing or to the storefront widget.
 
 = 1.0.2 =
 Corrects the plugin header links. No functional change.

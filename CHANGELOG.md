@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-08-18
+
+### Fixed
+- The text domain is now `idea89-ai-shopping-assistant`, matching the plugin
+  slug. It was `idea89-assistant`, which meant WordPress' automatic translation
+  loading (slug-based since 4.6) would never have found the plugin's strings.
+  Flagged by Plugin Check as 55 `WordPress.WP.I18n.TextDomainMismatch` errors.
+- Dropped the `load_plugin_textdomain()` call, discouraged since WordPress 4.6
+  for directory-hosted plugins and a source of the
+  `_load_textdomain_just_in_time` notice on 6.7+.
+
+### Internal
+- Annotated the three `apply_filters( 'the_content', ... )` call sites: the
+  sniff reads them as unprefixed hooks, but they apply a core filter to render
+  post content rather than defining a hook.
+
 ## [1.0.2] - 2026-08-18
 
 ### Fixed
