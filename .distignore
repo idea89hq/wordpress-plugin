@@ -1,0 +1,26 @@
+# Paths excluded from the distributable idea89-assistant.zip by build-zip.sh.
+# One path per line, relative to this directory. A trailing content match is
+# a prefix match (so a directory line excludes everything under it).
+#
+# Nothing here should ever reach wordpress.org or a merchant's site: it is
+# either a dev-only dependency, a test suite, a lint/build config, or repo
+# scaffolding aimed at a contributor rather than an install.
+
+vendor
+tests
+node_modules
+composer.json
+composer.lock
+phpunit.xml.dist
+phpcs.xml.dist
+.gitignore
+.distignore
+.git
+.phpunit.result.cache
+.phpunit.cache
+CONTRIBUTING.md
+README.md
+CHANGELOG.md
+build-zip.sh
+*.zip
+.DS_Store

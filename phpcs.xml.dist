@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<ruleset name="IDEA89">
+  <description>WordPress coding standards for the IDEA89 assistant plugin.</description>
+  <file>.</file>
+  <exclude-pattern>/vendor/*</exclude-pattern>
+  <exclude-pattern>/tests/*</exclude-pattern>
+  <arg name="extensions" value="php"/>
+  <rule ref="WordPress">
+    <exclude name="WordPress.Files.FileName"/>
+  </rule>
+  <rule ref="PHPCompatibility"/>
+  <config name="minimum_supported_wp_version" value="6.4"/>
+  <!--
+    The installed phpcompatibility/php-compatibility (9.3.5, released 2019-12-27,
+    before PHP 8.0 existed) has no sniffs for PHP 8-only syntax: constructor
+    property promotion, match, nullsafe (?->), named arguments, enums, readonly.
+    It still catches genuine pre-2020 cross-version issues (removed/deprecated
+    functions, changed signatures) and is worth keeping for that, but
+    testVersion="7.4-" below does NOT reject PHP 8-only syntax on its own.
+    `composer lint:php74` (parses every file under a real PHP 7.4 CLI via
+    Docker) is the actual floor gate for the "no PHP 8 syntax" constraint.
+  -->
+  <config name="testVersion" value="7.4-"/>
+</ruleset>
