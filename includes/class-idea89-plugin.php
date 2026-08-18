@@ -97,6 +97,16 @@ class Idea89_Plugin {
 		require_once IDEA89_PLUGIN_DIR . 'includes/sync/class-idea89-faq-detector.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/sync/class-idea89-faq-syncer.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/sync/class-idea89-document-syncer.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/orders/class-idea89-order-tracking-config.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/orders/class-idea89-tracking-url-resolver.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/orders/class-idea89-order-sanitizer.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/orders/class-idea89-guest-rate-limit.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/locator/class-idea89-remote-config.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/locator/class-idea89-locator-config.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/locator/class-idea89-locator-page.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/personalization/class-idea89-personalization-config.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/personalization/class-idea89-identity-token.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/orders/class-idea89-order-endpoints.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/class-idea89-hooks.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/functions.php';
 
@@ -105,6 +115,15 @@ class Idea89_Plugin {
 
 		$hooks = new Idea89_Hooks();
 		$hooks->register();
+
+		idea89_order_endpoints()->register();
+		idea89_locator_page()->register();
+
+		// The dashboard settings cache is keyed to nothing but the store, so
+		// changing which store this site points at must drop it immediately
+		// rather than leaving up to 15 minutes of another tenant's config.
+		add_action( 'update_option_idea89_api_key', array( 'Idea89_Remote_Config', 'flush' ) );
+		add_action( 'update_option_idea89_api_url', array( 'Idea89_Remote_Config', 'flush' ) );
 
 		require_once IDEA89_PLUGIN_DIR . 'includes/frontend/class-idea89-widget.php';
 

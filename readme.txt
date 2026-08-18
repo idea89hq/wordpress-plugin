@@ -5,7 +5,7 @@ Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.0.3
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -26,6 +26,20 @@ The plugin's job is entirely on the WordPress side: it reads your store and keep
 * **Store details**: store name, currency, and the context you provide in settings
 * **FAQs**: auto-detected from your content (see Limitations below), with a settings screen to review what was found
 * **Posts and other public content types**: blog posts and any custom post type you opt in, indexed and searched rather than dumped into every reply, so a large blog doesn't overwhelm the assistant
+
+= Order tracking (optional) =
+
+Switch this on and shoppers can ask about an order in the chat instead of emailing you. They see status, items, delivery method and a tracking link where one exists.
+
+Order details never reach IDEA89 or any AI provider. The chat panel asks your own site for them, from the shopper's browser, using the login they already have. Signed-in shoppers see their recent orders. Guests can look up a single order with its number and the email address used to place it, limited to four attempts an hour so the form cannot be used to probe for which orders exist. Tracking numbers are read from the official WooCommerce Shipment Tracking extension or AfterShip if you use either.
+
+= Store finder (optional) =
+
+Publishes a store finder page at a URL you choose, with a searchable map and your own header and footer around it. Headings, help text and the meta description are all editable, and each store is published as structured data so search engines can read its address and opening details. Your store list is managed in your IDEA89 dashboard. Availability depends on your plan.
+
+= Personalization (optional) =
+
+Lets the assistant recognise a returning customer so it can pick up where a conversation left off. Your site signs a short-lived token holding only a customer reference, a group reference and whether the shopper is signed in. No name, email address or order history is sent, the token expires after an hour, and it cannot be forged in the browser because the signing secret never leaves your server.
 
 Sync runs in the background via Action Scheduler (bundled with WooCommerce), triggered by product, stock, coupon and content saves, plus a daily full reconcile. Nothing runs until you enter an API key, and nothing blocks a page save waiting on a network call. Every sync is queued and processed asynchronously.
 
@@ -123,6 +137,12 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 
 == Changelog ==
 
+= 1.1.0 =
+* **Order tracking.** Shoppers can ask "where is my order?" in the chat and see their own order status, delivery progress and tracking links. Order details are read by the shopper's browser directly from your site and are never sent to IDEA89 or to any AI provider. Signed-in shoppers see their recent orders; guests can look up one order with its number and the email used to place it. Off by default.
+* **Store finder page.** Publishes a searchable map of your stores at a URL you choose, styled to your brand and using your own theme's header and footer, with structured data so search engines can read your store details. Off by default.
+* **Shopper personalization.** Lets the assistant recognise a returning customer, using a short-lived signed token that carries no name, email address or order history. Off by default.
+* Dashboard settings such as map provider and brand colour are now read from your IDEA89 account, so they are set once for every storefront you run.
+
 = 1.0.3 =
 * Text domain now matches the plugin slug, so WordPress can load translations for the plugin.
 * Removed the redundant load_plugin_textdomain() call.
@@ -139,6 +159,9 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 * Initial release. Catalogue, category, page, coupon, FAQ and content sync; storefront chat widget with WooCommerce Store API add-to-cart; admin settings with Test Connection and Sync Now.
 
 == Upgrade Notice ==
+
+= 1.1.0 =
+Adds order tracking, a store finder page and shopper personalization. All three are off until you switch them on, so nothing changes on upgrade.
 
 = 1.0.3 =
 Translation loading fix. No changes to syncing or to the storefront widget.

@@ -2,3 +2,7 @@
 /node_modules/
 .phpunit.result.cache
 *.zip
+
+# Plugin Check writes its report next to the plugin as
+# <slug>-<main-file>-<timestamp>.md. It is a local QA artifact, never shipped.
+idea89-ai-shopping-assistant-*.md

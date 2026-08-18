@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-08-18
+
+### Added
+- **Order tracking.** Four endpoints under `/idea89` answer the chat widget's
+  order card: `customer/me`, `orders/recent`, `orders/detail` and a guest
+  `orders/lookup`. The widget calls them same-origin with the shopper's own
+  cookies, so order data goes browser to merchant and never reaches IDEA89 or
+  a model provider. `Idea89_Order_Sanitizer` is an allow-list, so a future
+  WooCommerce field cannot leak by default. Both lookup paths return an
+  identical 404 for "no such order" and "not yours", the guest path compares
+  emails with `hash_equals` and is capped at four attempts per hour per IP
+  keyed by a salted hash, and the email is never logged. Tracking numbers are
+  read from WooCommerce Shipment Tracking and AfterShip, with the
+  `idea89_order_tracking` filter for anything else; an unknown carrier yields
+  no URL rather than a guessed one. Off by default.
+- **Store finder page.** A virtual page at a configurable slug, rendered
+  inside the active theme so it carries the merchant's header and footer, with
+  editable hero and help copy, a page title and meta description, two layouts,
+  and per-store JSON-LD. A real page at the same slug always wins and the
+  settings screen warns about the collision; reserved slugs such as `cart` and
+  `checkout` fall back to the default. Off by default.
+- **Shopper personalization.** Mints the per-store HMAC identity token the
+  widget forwards to IDEA89, carrying only a customer id, a group id and a
+  signed-in flag, expiring after an hour. Verified against the API's own
+  verifier rather than assumed. Adds `POST /idea89/products/live`, authorised
+  with the same secret and capped at 25 SKUs, so prices can be confirmed
+  before they are quoted. Off by default, and treated as off unless both the
+  toggle and a secret are set.
+- **Dashboard-managed settings.** Map provider, map key, brand colour and the
+  locator plan gate are read from the IDEA89 dashboard and cached for fifteen
+  minutes. Fails closed: a timeout, a 500 or an unparsable body all leave the
+  locator disabled.
+
+### Fixed
+- Store locator: read location fields from the shape `/widget/v1/locations`
+  actually returns, where city and country sit under `address` and the
+  coordinates under `geo` as `lat`/`lng`. The first cut read flat `city`,
+  `country_code` and `latitude` keys the endpoint has never sent, which would
+  have rendered the hero counts as zero and emitted JSON-LD with no address on
+  every store. The flat shape is still accepted as a fallback.
+- Store locator: the map host now contains a plain store list until the web
+  component upgrades and replaces it. Previously a bundle that failed to run,
+  for any reason, left a tall blank block with no explanation.
+
 ## [1.0.3] - 2026-08-18
 
 ### Fixed

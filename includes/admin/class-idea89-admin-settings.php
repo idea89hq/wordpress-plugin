@@ -158,11 +158,11 @@ class Idea89_Admin_Settings {
 	 */
 	public function register_settings() {
 		$options = array(
-			'idea89_enabled'         => array(
+			'idea89_enabled'                      => array(
 				'type'              => 'boolean',
 				'sanitize_callback' => 'rest_sanitize_boolean',
 			),
-			'idea89_api_key'         => array(
+			'idea89_api_key'                      => array(
 				'type'              => 'string',
 				'sanitize_callback' => 'sanitize_text_field',
 				// Kept out of the autoloaded options cache: Idea89_Config's
@@ -170,23 +170,23 @@ class Idea89_Admin_Settings {
 				// disabled, and this is where that option is first created.
 				'autoload'          => false,
 			),
-			'idea89_api_url'         => array(
+			'idea89_api_url'                      => array(
 				'type'              => 'string',
 				'sanitize_callback' => array( __CLASS__, 'sanitize_api_url' ),
 			),
-			'idea89_assistant_name'  => array(
+			'idea89_assistant_name'               => array(
 				'type'              => 'string',
 				'sanitize_callback' => 'sanitize_text_field',
 			),
-			'idea89_store_context'   => array(
+			'idea89_store_context'                => array(
 				'type'              => 'string',
 				'sanitize_callback' => 'sanitize_textarea_field',
 			),
-			'idea89_widget_position' => array(
+			'idea89_widget_position'              => array(
 				'type'              => 'string',
 				'sanitize_callback' => array( __CLASS__, 'sanitize_position' ),
 			),
-			'idea89_brand_color'     => array(
+			'idea89_brand_color'                  => array(
 				'type'              => 'string',
 				'sanitize_callback' => array( __CLASS__, 'sanitize_brand_color' ),
 			),
@@ -200,31 +200,94 @@ class Idea89_Admin_Settings {
 			// returns WordPress's own false, the checkbox renders unchecked, and
 			// the very first settings save — e.g. just to paste in the API key —
 			// would persist that false and turn content sync off for good.
-			'idea89_sync_categories' => array(
+			'idea89_sync_categories'              => array(
 				'type'              => 'boolean',
 				'sanitize_callback' => 'rest_sanitize_boolean',
 				'default'           => true,
 			),
-			'idea89_sync_pages'      => array(
+			'idea89_sync_pages'                   => array(
 				'type'              => 'boolean',
 				'sanitize_callback' => 'rest_sanitize_boolean',
 				'default'           => true,
 			),
-			'idea89_sync_store_info' => array(
+			'idea89_sync_store_info'              => array(
 				'type'              => 'boolean',
 				'sanitize_callback' => 'rest_sanitize_boolean',
 				'default'           => true,
 			),
-			'idea89_sync_faqs'       => array(
+			'idea89_sync_faqs'                    => array(
 				'type'              => 'boolean',
 				'sanitize_callback' => 'rest_sanitize_boolean',
 				'default'           => true,
 			),
-			'idea89_sync_post_types' => array(
+			'idea89_sync_post_types'              => array(
 				'type'              => 'array',
 				'sanitize_callback' => array( __CLASS__, 'sanitize_post_types' ),
 			),
+			// Order tracking is off until asked for: these endpoints read a
+			// shopper's own orders, so an upgrade must not switch them on.
+			'idea89_order_tracking_enabled'       => array(
+				'type'              => 'boolean',
+				'sanitize_callback' => 'rest_sanitize_boolean',
+				'default'           => false,
+			),
+			// Default true, so it needs a registered default for the same
+			// reason the sync toggles above do.
+			'idea89_order_tracking_show_button'   => array(
+				'type'              => 'boolean',
+				'sanitize_callback' => 'rest_sanitize_boolean',
+				'default'           => true,
+			),
+			'idea89_order_tracking_support_url'   => array(
+				'type'              => 'string',
+				'sanitize_callback' => 'esc_url_raw',
+			),
+			'idea89_order_tracking_support_label' => array(
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+			),
+			'idea89_order_tracking_max_recent'    => array(
+				'type'              => 'integer',
+				'sanitize_callback' => 'absint',
+				'default'           => Idea89_Order_Tracking_Config::DEFAULT_MAX_RECENT,
+			),
+			'idea89_personalization_enabled'      => array(
+				'type'              => 'boolean',
+				'sanitize_callback' => 'rest_sanitize_boolean',
+				'default'           => false,
+			),
+			// Shared secret: kept out of the autoloaded cache for the same
+			// reason as the API key.
+			'idea89_personalization_secret'       => array(
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+				'autoload'          => false,
+			),
+			'idea89_locator_enabled'              => array(
+				'type'              => 'boolean',
+				'sanitize_callback' => 'rest_sanitize_boolean',
+				'default'           => false,
+			),
+			'idea89_locator_url_path'             => array(
+				'type'              => 'string',
+				'sanitize_callback' => array( 'Idea89_Locator_Config', 'sanitize_slug' ),
+				'default'           => Idea89_Locator_Config::DEFAULT_URL_PATH,
+			),
+			'idea89_locator_layout'               => array(
+				'type'              => 'string',
+				'sanitize_callback' => array( __CLASS__, 'sanitize_layout' ),
+			),
 		);
+
+		foreach ( Idea89_Locator_Config::text_defaults() as $locator_option => $locator_default ) {
+			$options[ $locator_option ] = array(
+				'type'              => 'string',
+				// Relative paths like /contact must survive, so this stays a
+				// text sanitiser; the value is escaped with esc_url at render.
+				'sanitize_callback' => 'sanitize_text_field',
+				'default'           => $locator_default,
+			);
+		}
 
 		foreach ( $options as $name => $args ) {
 			// autoload is left at WordPress's default for these small values,
@@ -274,6 +337,124 @@ class Idea89_Admin_Settings {
 			self::PAGE_SLUG,
 			'idea89_content'
 		);
+
+		add_settings_section(
+			'idea89_orders',
+			__( 'Order tracking', 'idea89-ai-shopping-assistant' ),
+			array( $this, 'render_orders_intro' ),
+			self::PAGE_SLUG
+		);
+
+		$this->add_field( 'idea89_order_tracking_enabled', __( 'Enable order tracking', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_orders' );
+		$this->add_field( 'idea89_order_tracking_max_recent', __( 'Recent orders to show', 'idea89-ai-shopping-assistant' ), 'number', 'idea89_orders' );
+		$this->add_field( 'idea89_order_tracking_show_button', __( 'Show "Track parcel" button', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_orders' );
+		$this->add_field( 'idea89_order_tracking_support_url', __( 'Support page URL', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_orders' );
+		$this->add_field( 'idea89_order_tracking_support_label', __( 'Support link label', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_orders' );
+
+		add_settings_section(
+			'idea89_personalization',
+			__( 'Personalization', 'idea89-ai-shopping-assistant' ),
+			array( $this, 'render_personalization_intro' ),
+			self::PAGE_SLUG
+		);
+
+		$this->add_field( 'idea89_personalization_enabled', __( 'Enable personalization', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_personalization' );
+		$this->add_field( 'idea89_personalization_secret', __( 'Signing secret', 'idea89-ai-shopping-assistant' ), 'password', 'idea89_personalization' );
+
+		add_settings_section(
+			'idea89_locator',
+			__( 'Store locator', 'idea89-ai-shopping-assistant' ),
+			array( $this, 'render_locator_intro' ),
+			self::PAGE_SLUG
+		);
+
+		$this->add_field( 'idea89_locator_enabled', __( 'Enable store finder page', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_locator' );
+		$this->add_field( 'idea89_locator_url_path', __( 'Page URL', 'idea89-ai-shopping-assistant' ), 'slug', 'idea89_locator' );
+		$this->add_field( 'idea89_locator_layout', __( 'Layout', 'idea89-ai-shopping-assistant' ), 'layout', 'idea89_locator' );
+		$this->add_field( 'idea89_locator_page_title', __( 'Page title', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_locator' );
+		$this->add_field( 'idea89_locator_meta_description', __( 'Meta description', 'idea89-ai-shopping-assistant' ), 'textarea', 'idea89_locator' );
+		$this->add_field( 'idea89_locator_hero_eyebrow', __( 'Hero eyebrow', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_locator' );
+		$this->add_field( 'idea89_locator_hero_h1', __( 'Hero heading', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_locator' );
+		$this->add_field( 'idea89_locator_hero_subhead', __( 'Hero subheading', 'idea89-ai-shopping-assistant' ), 'textarea', 'idea89_locator' );
+		$this->add_field( 'idea89_locator_help_heading', __( 'Help heading', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_locator' );
+		$this->add_field( 'idea89_locator_help_body', __( 'Help text', 'idea89-ai-shopping-assistant' ), 'textarea', 'idea89_locator' );
+		$this->add_field( 'idea89_locator_help_cta_label', __( 'Help button label', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_locator' );
+		$this->add_field( 'idea89_locator_help_cta_url', __( 'Help button URL', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_locator' );
+	}
+
+	/**
+	 * Keeps 'fullwidth', 'boxed' or an empty string, which means defer to the
+	 * dashboard setting.
+	 *
+	 * @param mixed $value Submitted value.
+	 * @return string
+	 */
+	public static function sanitize_layout( $value ) {
+		$value = is_string( $value ) ? $value : '';
+
+		return in_array( $value, array( 'fullwidth', 'boxed' ), true ) ? $value : '';
+	}
+
+	/**
+	 * Intro copy for the locator, plus a warning when the chosen slug is
+	 * already taken by a real page.
+	 *
+	 * @return void
+	 */
+	public function render_locator_intro() {
+		echo '<p>' . esc_html__( 'Publishes a store finder page with a searchable map, and lets the assistant answer "where is your nearest store?" in chat.', 'idea89-ai-shopping-assistant' ) . '</p>';
+
+		$slug = idea89_locator_config()->get_url_path();
+
+		if ( Idea89_Locator_Page::slug_is_taken( $slug ) ) {
+			printf(
+				'<div class="notice notice-warning inline"><p>%s</p></div>',
+				esc_html(
+					sprintf(
+						/* translators: %s: page slug */
+						__( 'A page or post already lives at /%s, so it keeps that address and the store finder stays hidden. Choose a different URL below.', 'idea89-ai-shopping-assistant' ),
+						$slug
+					)
+				)
+			);
+		} elseif ( idea89_locator_config()->is_enabled() ) {
+			printf(
+				'<p class="description">%s <a href="%s" target="_blank" rel="noopener noreferrer">%s</a></p>',
+				esc_html__( 'Your store finder is published at', 'idea89-ai-shopping-assistant' ),
+				esc_url( home_url( '/' . $slug ) ),
+				esc_html( home_url( '/' . $slug ) )
+			);
+		}
+
+		if ( ! idea89_remote_config()->is_locator_plan_enabled() ) {
+			printf(
+				'<div class="notice notice-info inline"><p>%s</p></div>',
+				esc_html__( 'The store finder is not available on your current plan, so the page stays hidden even when enabled here. Locations are managed in your IDEA89 dashboard.', 'idea89-ai-shopping-assistant' )
+			);
+		}
+	}
+
+	/**
+	 * Intro copy for personalization, stating what does and does not leave
+	 * the site.
+	 *
+	 * @return void
+	 */
+	public function render_personalization_intro() {
+		echo '<p>' . esc_html__( 'Lets the assistant recognise a returning customer, so it can pick up where a conversation left off.', 'idea89-ai-shopping-assistant' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Your site signs a short-lived token holding only a customer id, a group id and whether the shopper is signed in. No name, email address or order history is sent. The token expires after an hour and the browser cannot forge one, because the secret never leaves this server. Paste the same secret into your IDEA89 dashboard.', 'idea89-ai-shopping-assistant' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Switching this on also opens a server-to-server endpoint that lets IDEA89 confirm live prices and stock before quoting them. It requires the same secret and returns no customer data.', 'idea89-ai-shopping-assistant' ) . '</p>';
+	}
+
+	/**
+	 * Intro copy for order tracking, including the privacy point that makes
+	 * this feature safe to switch on.
+	 *
+	 * @return void
+	 */
+	public function render_orders_intro() {
+		echo '<p>' . esc_html__( 'Lets shoppers ask "where is my order?" in the chat and see their own order status, without leaving your site.', 'idea89-ai-shopping-assistant' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Order details are read by the shopper\'s own browser directly from this site. They are never sent to IDEA89 or to any AI provider. Logged-in shoppers see their recent orders; guests can look up a single order with its number and the email address used to place it, rate limited to four attempts per hour.', 'idea89-ai-shopping-assistant' ) . '</p>';
 	}
 
 	/**
@@ -403,8 +584,28 @@ class Idea89_Admin_Settings {
 			'idea89_sync_pages',
 			'idea89_sync_store_info',
 			'idea89_sync_faqs',
+			'idea89_order_tracking_show_button',
 		);
-		return in_array( $name, $on_by_default, true ) ? true : '';
+
+		if ( in_array( $name, $on_by_default, true ) ) {
+			return true;
+		}
+
+		if ( 'idea89_order_tracking_max_recent' === $name ) {
+			return Idea89_Order_Tracking_Config::DEFAULT_MAX_RECENT;
+		}
+
+		if ( 'idea89_locator_url_path' === $name ) {
+			return Idea89_Locator_Config::DEFAULT_URL_PATH;
+		}
+
+		$locator_default = Idea89_Locator_Config::default_for( $name );
+
+		if ( '' !== $locator_default ) {
+			return $locator_default;
+		}
+
+		return '';
 	}
 
 	/**
@@ -491,6 +692,42 @@ class Idea89_Admin_Settings {
 					);
 				}
 				echo '</select>';
+				break;
+
+			case 'slug':
+				printf(
+					'<code>%1$s/</code><input type="text" name="%2$s" value="%3$s" class="regular-text" />',
+					esc_html( home_url() ),
+					esc_attr( $name ),
+					esc_attr( (string) $value )
+				);
+				break;
+
+			case 'layout':
+				echo '<select name="' . esc_attr( $name ) . '">';
+				foreach ( array(
+					''          => __( 'Use dashboard setting', 'idea89-ai-shopping-assistant' ),
+					'fullwidth' => __( 'Fullwidth (edge-to-edge map)', 'idea89-ai-shopping-assistant' ),
+					'boxed'     => __( 'Boxed (rounded card)', 'idea89-ai-shopping-assistant' ),
+				) as $key => $label ) {
+					printf(
+						'<option value="%1$s" %2$s>%3$s</option>',
+						esc_attr( $key ),
+						selected( $value, $key, false ),
+						esc_html( $label )
+					);
+				}
+				echo '</select>';
+				break;
+
+			case 'number':
+				printf(
+					'<input type="number" name="%1$s" value="%2$s" min="%3$d" max="%4$d" step="1" class="small-text" />',
+					esc_attr( $name ),
+					esc_attr( (string) $value ),
+					(int) Idea89_Order_Tracking_Config::MIN_RECENT,
+					(int) Idea89_Order_Tracking_Config::MAX_RECENT
+				);
 				break;
 
 			case 'password':

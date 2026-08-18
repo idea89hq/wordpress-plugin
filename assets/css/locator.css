@@ -1,0 +1,204 @@
+/**
+ * Store-finder page.
+ *
+ * Scoped under .idea89-storefinder-page so nothing here can reach the
+ * merchant's theme. Colours come from --sf-accent, set inline from the brand
+ * colour, with a neutral fallback for stores that never set one.
+ */
+
+.idea89-storefinder-page {
+	--sf-accent: #4f46e5;
+	--sf-ink: #111827;
+	--sf-muted: #6b7280;
+	--sf-line: #e5e7eb;
+	--sf-surface: #ffffff;
+	--sf-raised: #f9fafb;
+	box-sizing: border-box;
+	color: var(--sf-ink);
+}
+
+.idea89-storefinder-page *,
+.idea89-storefinder-page *::before,
+.idea89-storefinder-page *::after {
+	box-sizing: inherit;
+}
+
+.idea89-storefinder-page .sf-hero {
+	background: linear-gradient(180deg, var(--sf-raised) 0%, var(--sf-surface) 100%);
+	border-bottom: 1px solid var(--sf-line);
+	padding: 3rem 1.25rem 2.5rem;
+}
+
+.idea89-storefinder-page .sf-hero-inner,
+.idea89-storefinder-page .sf-help-inner {
+	margin: 0 auto;
+	max-width: 68rem;
+	text-align: center;
+}
+
+.idea89-storefinder-page .sf-hero-eyebrow,
+.idea89-storefinder-page .sf-help-eyebrow {
+	color: var(--sf-accent);
+	display: inline-block;
+	font-size: 0.75rem;
+	font-weight: 700;
+	letter-spacing: 0.09em;
+	margin-bottom: 0.75rem;
+	text-transform: uppercase;
+}
+
+.idea89-storefinder-page .sf-hero-title {
+	font-size: clamp(1.9rem, 4vw, 3rem);
+	line-height: 1.15;
+	margin: 0 0 0.75rem;
+}
+
+.idea89-storefinder-page .sf-hero-subtitle {
+	color: var(--sf-muted);
+	font-size: 1.05rem;
+	line-height: 1.6;
+	margin: 0 auto;
+	max-width: 42rem;
+}
+
+.idea89-storefinder-page .sf-hero-stats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2.5rem;
+	justify-content: center;
+	margin-top: 2rem;
+}
+
+.idea89-storefinder-page .sf-stat {
+	min-width: 5rem;
+}
+
+.idea89-storefinder-page .sf-stat-num {
+	display: block;
+	font-size: 1.75rem;
+	font-weight: 700;
+	line-height: 1.1;
+}
+
+.idea89-storefinder-page .sf-stat-label {
+	color: var(--sf-muted);
+	display: block;
+	font-size: 0.8rem;
+	letter-spacing: 0.04em;
+	margin-top: 0.25rem;
+	text-transform: uppercase;
+}
+
+.idea89-storefinder-page .sf-locator-section {
+	padding: 0;
+}
+
+.idea89-storefinder-page .idea89-locator-host {
+	min-height: 32rem;
+	width: 100%;
+}
+
+.idea89-storefinder-page[data-layout="boxed"] .sf-locator-section {
+	margin: 0 auto;
+	max-width: 72rem;
+	padding: 2rem 1.25rem;
+}
+
+.idea89-storefinder-page[data-layout="boxed"] .idea89-locator-host {
+	border: 1px solid var(--sf-line);
+	border-radius: 1rem;
+	overflow: hidden;
+}
+
+.idea89-storefinder-page .sf-help {
+	background: var(--sf-raised);
+	border-top: 1px solid var(--sf-line);
+	padding: 3rem 1.25rem;
+}
+
+.idea89-storefinder-page .sf-help-title {
+	font-size: clamp(1.35rem, 2.5vw, 1.9rem);
+	margin: 0 0 0.65rem;
+}
+
+.idea89-storefinder-page .sf-help-subtitle {
+	color: var(--sf-muted);
+	line-height: 1.65;
+	margin: 0 auto 1.5rem;
+	max-width: 40rem;
+}
+
+.idea89-storefinder-page .sf-help-btn {
+	align-items: center;
+	background: var(--sf-accent);
+	border-radius: 999px;
+	color: #fff;
+	display: inline-flex;
+	font-weight: 600;
+	gap: 0.5rem;
+	padding: 0.75rem 1.5rem;
+	text-decoration: none;
+	transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.idea89-storefinder-page .sf-help-btn:hover,
+.idea89-storefinder-page .sf-help-btn:focus {
+	color: #fff;
+	opacity: 0.92;
+	transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.idea89-storefinder-page .sf-help-btn {
+		transition: none;
+	}
+
+	.idea89-storefinder-page .sf-help-btn:hover,
+	.idea89-storefinder-page .sf-help-btn:focus {
+		transform: none;
+	}
+}
+
+@media (max-width: 600px) {
+	.idea89-storefinder-page .sf-hero {
+		padding: 2rem 1rem 1.75rem;
+	}
+
+	.idea89-storefinder-page .sf-hero-stats {
+		gap: 1.5rem;
+	}
+}
+
+/**
+ * Fallback list shown inside the locator host until the web component
+ * upgrades and replaces its own children. Also the permanent view for
+ * anyone whose browser never runs the bundle.
+ */
+.idea89-storefinder-page .sf-fallback-list {
+	list-style: none;
+	margin: 0 auto;
+	max-width: 60rem;
+	padding: 2.5rem 1.25rem;
+}
+
+.idea89-storefinder-page .sf-fallback-list li {
+	border-bottom: 1px solid var(--sf-line);
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	padding: 1rem 0;
+}
+
+.idea89-storefinder-page .sf-fallback-list li:last-child {
+	border-bottom: 0;
+}
+
+.idea89-storefinder-page .sf-fallback-list span {
+	color: var(--sf-muted);
+}
+
+.idea89-storefinder-page .sf-fallback {
+	color: var(--sf-muted);
+	padding: 2rem 1.25rem 0;
+	text-align: center;
+}

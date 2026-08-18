@@ -116,3 +116,99 @@ function idea89_document_syncer() {
 	}
 	return $syncer;
 }
+
+/**
+ * Shared order-tracking settings accessor.
+ *
+ * @return Idea89_Order_Tracking_Config
+ */
+function idea89_order_tracking_config() {
+	static $config = null;
+
+	if ( null === $config ) {
+		$config = new Idea89_Order_Tracking_Config();
+	}
+
+	return $config;
+}
+
+/**
+ * Shared order endpoint router.
+ *
+ * @return Idea89_Order_Endpoints
+ */
+function idea89_order_endpoints() {
+	static $endpoints = null;
+
+	if ( null === $endpoints ) {
+		$endpoints = new Idea89_Order_Endpoints(
+			idea89_order_tracking_config(),
+			new Idea89_Order_Sanitizer( new Idea89_Tracking_Url_Resolver() ),
+			new Idea89_Guest_Rate_Limit(),
+			idea89_personalization_config(),
+			idea89_config()
+		);
+	}
+
+	return $endpoints;
+}
+
+/**
+ * Shared personalization settings accessor.
+ *
+ * @return Idea89_Personalization_Config
+ */
+function idea89_personalization_config() {
+	static $config = null;
+
+	if ( null === $config ) {
+		$config = new Idea89_Personalization_Config();
+	}
+
+	return $config;
+}
+
+/**
+ * Shared locator settings accessor.
+ *
+ * @return Idea89_Locator_Config
+ */
+function idea89_locator_config() {
+	static $config = null;
+
+	if ( null === $config ) {
+		$config = new Idea89_Locator_Config();
+	}
+
+	return $config;
+}
+
+/**
+ * Shared dashboard-settings reader.
+ *
+ * @return Idea89_Remote_Config
+ */
+function idea89_remote_config() {
+	static $remote = null;
+
+	if ( null === $remote ) {
+		$remote = new Idea89_Remote_Config( idea89_config() );
+	}
+
+	return $remote;
+}
+
+/**
+ * Shared store-finder page controller.
+ *
+ * @return Idea89_Locator_Page
+ */
+function idea89_locator_page() {
+	static $page = null;
+
+	if ( null === $page ) {
+		$page = new Idea89_Locator_Page( idea89_locator_config(), idea89_remote_config(), idea89_config() );
+	}
+
+	return $page;
+}
