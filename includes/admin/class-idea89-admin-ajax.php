@@ -52,7 +52,23 @@ class Idea89_Admin_Ajax {
 		$result = idea89_client()->test_connection();
 
 		if ( ! empty( $result['ok'] ) ) {
-			wp_send_json_success( array( 'message' => __( 'Connected. Your API key works.', 'idea89-ai-shopping-assistant' ) ) );
+			$site = isset( $result['site'] ) ? (string) $result['site'] : '';
+			wp_send_json_success(
+				array(
+					// Naming the site catches a key pasted from another IDEA89
+					// account on the same host, e.g. the Magento shop at the
+					// domain root when this is the WordPress site in a folder.
+					// Falls back to the plain message against an API that
+					// predates the echo.
+					'message' => '' !== $site
+						? sprintf(
+							/* translators: %s: the site this API key belongs to, e.g. example.com/wordpress */
+							__( 'Connected to %s. Your API key works.', 'idea89-ai-shopping-assistant' ),
+							$site
+						)
+						: __( 'Connected. Your API key works.', 'idea89-ai-shopping-assistant' ),
+				)
+			);
 		}
 
 		wp_send_json_error( array( 'message' => $result['error'] ) );

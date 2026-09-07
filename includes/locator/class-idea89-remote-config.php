@@ -57,13 +57,21 @@ class Idea89_Remote_Config {
 	 */
 	public static function fallback() {
 		return array(
-			'provider'          => 'stadia',
-			'key'               => null,
-			'country'           => null,
-			'count'             => 3,
-			'brandColor'        => null,
-			'storefinderLayout' => 'fullwidth',
-			'locatorEnabled'    => false,
+			'provider'               => 'stadia',
+			'key'                    => null,
+			'country'                => null,
+			'count'                  => 3,
+			'brandColor'             => null,
+			'storefinderLayout'      => 'fullwidth',
+			'locatorEnabled'         => false,
+			// Empty rather than 'full': an unreachable API has not told us
+			// anything, so the settings screen should keep showing the local
+			// cache instead of being moved to a mode nobody chose.
+			'checkoutUi'             => '',
+			'assistantName'          => '',
+			// null, not false: the panel says "unknown" when the API could
+			// not be asked rather than claiming the other half is off.
+			'personalizationEnabled' => null,
 		);
 	}
 
@@ -104,6 +112,43 @@ class Idea89_Remote_Config {
 		$cfg = $this->get();
 
 		return ! empty( $cfg['locatorEnabled'] );
+	}
+
+	/**
+	 * The checkout display setting as IDEA89 holds it.
+	 *
+	 * Static so the settings screen can ask without wiring up an instance.
+	 * Returns '' when the API could not be reached or is too old to send it,
+	 * which the caller reads as "keep showing the local value".
+	 *
+	 * @return string
+	 */
+	public static function personalization_enabled() {
+		$cfg = idea89_remote_config()->get();
+
+		return array_key_exists( 'personalizationEnabled', $cfg ) ? $cfg['personalizationEnabled'] : null;
+	}
+
+	/**
+	 * The assistant name as IDEA89 holds it.
+	 *
+	 * @return string
+	 */
+	public static function assistant_name() {
+		$cfg = idea89_remote_config()->get();
+
+		return isset( $cfg['assistantName'] ) && is_string( $cfg['assistantName'] ) ? $cfg['assistantName'] : '';
+	}
+
+	/**
+	 * The checkout display setting as IDEA89 holds it.
+	 *
+	 * @return string
+	 */
+	public static function checkout_ui() {
+		$cfg = idea89_remote_config()->get();
+
+		return isset( $cfg['checkoutUi'] ) && is_string( $cfg['checkoutUi'] ) ? $cfg['checkoutUi'] : '';
 	}
 
 	/**
@@ -169,13 +214,19 @@ class Idea89_Remote_Config {
 			: '';
 
 		return array(
-			'provider'          => isset( $cfg['mapProvider'] ) && is_string( $cfg['mapProvider'] ) ? $cfg['mapProvider'] : $fallback['provider'],
-			'key'               => isset( $cfg['mapKey'] ) && is_string( $cfg['mapKey'] ) ? $cfg['mapKey'] : null,
-			'country'           => isset( $cfg['defaultCountryCode'] ) && is_string( $cfg['defaultCountryCode'] ) ? $cfg['defaultCountryCode'] : null,
-			'count'             => isset( $cfg['nearestResultsCount'] ) && is_int( $cfg['nearestResultsCount'] ) ? $cfg['nearestResultsCount'] : $fallback['count'],
-			'brandColor'        => isset( $cfg['brandColor'] ) && is_string( $cfg['brandColor'] ) ? $cfg['brandColor'] : null,
-			'storefinderLayout' => in_array( $layout, array( 'fullwidth', 'boxed' ), true ) ? $layout : $fallback['storefinderLayout'],
-			'locatorEnabled'    => isset( $cfg['locatorEnabled'] ) && is_bool( $cfg['locatorEnabled'] ) ? $cfg['locatorEnabled'] : false,
+			'provider'               => isset( $cfg['mapProvider'] ) && is_string( $cfg['mapProvider'] ) ? $cfg['mapProvider'] : $fallback['provider'],
+			'key'                    => isset( $cfg['mapKey'] ) && is_string( $cfg['mapKey'] ) ? $cfg['mapKey'] : null,
+			'country'                => isset( $cfg['defaultCountryCode'] ) && is_string( $cfg['defaultCountryCode'] ) ? $cfg['defaultCountryCode'] : null,
+			'count'                  => isset( $cfg['nearestResultsCount'] ) && is_int( $cfg['nearestResultsCount'] ) ? $cfg['nearestResultsCount'] : $fallback['count'],
+			'brandColor'             => isset( $cfg['brandColor'] ) && is_string( $cfg['brandColor'] ) ? $cfg['brandColor'] : null,
+			'storefinderLayout'      => in_array( $layout, array( 'fullwidth', 'boxed' ), true ) ? $layout : $fallback['storefinderLayout'],
+			'locatorEnabled'         => isset( $cfg['locatorEnabled'] ) && is_bool( $cfg['locatorEnabled'] ) ? $cfg['locatorEnabled'] : false,
+			// Read back so the settings screen can show a change made in the
+			// dashboard. An older API that does not send the key yields '',
+			// which the caller treats as "no opinion".
+			'checkoutUi'             => isset( $cfg['checkoutUi'] ) && 'inline' === $cfg['checkoutUi'] ? 'inline' : ( isset( $cfg['checkoutUi'] ) ? 'full' : '' ),
+			'assistantName'          => isset( $cfg['assistantName'] ) && is_string( $cfg['assistantName'] ) ? $cfg['assistantName'] : '',
+			'personalizationEnabled' => isset( $cfg['personalizationEnabled'] ) ? (bool) $cfg['personalizationEnabled'] : null,
 		);
 	}
 }

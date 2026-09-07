@@ -55,6 +55,79 @@ class ClientTest extends TestCase {
 		$this->assertSame( 'shop.example.test', $client->domain_header() );
 	}
 
+	public function test_site_path_header_is_a_slash_for_a_root_install() {
+		// NOT the empty string: libcurl drops a header whose value is empty,
+		// so the API would see no path at all and fall back to letting the
+		// request through. '/' crosses the wire and the API normalises it
+		// back to '' — see the note on site_path_header().
+		$client = new Idea89_Client( new Idea89_Config() );
+		$this->assertSame( '/', $client->site_path_header() );
+	}
+
+	public function test_site_path_header_is_the_base_path_for_a_subfolder_install() {
+		Functions\when( 'home_url' )->justReturn( 'https://shop.example.test/WordPress/' );
+		$client = new Idea89_Client( new Idea89_Config() );
+		$this->assertSame( '/wordpress', $client->site_path_header() );
+	}
+
+	public function test_site_path_header_is_a_slash_for_a_root_install_with_a_trailing_slash() {
+		// wp_parse_url() returns '/' here, not null — a distinct branch in
+		// site_path_header() from the no-path case above. Both must collapse
+		// to '/', which the API normalises to the '' a root store is
+		// registered with. Returning '' here instead would be dropped by
+		// libcurl and reopen the fail-open the header exists to close.
+		Functions\when( 'home_url' )->justReturn( 'https://shop.example.test/' );
+		$client = new Idea89_Client( new Idea89_Config() );
+		$this->assertSame( '/', $client->site_path_header() );
+	}
+
+	public function test_site_label_has_no_trailing_slash_for_a_root_install() {
+		// The merchant-facing string must not inherit the '/' that
+		// site_path_header() sends to keep libcurl from dropping the header.
+		$client = new Idea89_Client( new Idea89_Config() );
+		$this->assertSame( 'shop.example.test', $client->site_label() );
+	}
+
+	public function test_site_label_includes_the_base_path_for_a_subfolder_install() {
+		Functions\when( 'home_url' )->justReturn( 'https://shop.example.test/WordPress/' );
+		$client = new Idea89_Client( new Idea89_Config() );
+		$this->assertSame( 'shop.example.test/wordpress', $client->site_label() );
+	}
+
+	public function test_upsert_products_sends_the_site_path_header() {
+		Functions\when( 'home_url' )->justReturn( 'https://shop.example.test/wordpress' );
+		Functions\expect( 'wp_remote_post' )
+			->once()
+			->with(
+				'https://api.example.test/v1/catalog/upsert',
+				Mockery::on(
+					function ( $args ) {
+						return 'shop.example.test' === $args['headers']['X-IDEA89-Domain']
+							&& '/wordpress' === $args['headers']['X-IDEA89-Site-Path'];
+					}
+				)
+			)
+			->andReturn( array( 'response' => array( 'code' => 200 ), 'body' => '{}' ) );
+
+		$client = new Idea89_Client( new Idea89_Config() );
+		$this->assertTrue( $client->upsert_products( array( array( 'external_id' => '1' ) ) ) );
+	}
+
+	public function test_test_connection_reports_the_site_the_key_belongs_to() {
+		Functions\when( 'wp_remote_get' )->justReturn(
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"total":"5","in_stock":"5","last_sync":null,"site":"shop.example.test/wordpress"}',
+			)
+		);
+
+		$client = new Idea89_Client( new Idea89_Config() );
+		$result = $client->test_connection();
+
+		$this->assertTrue( $result['ok'] );
+		$this->assertSame( 'shop.example.test/wordpress', $result['site'] );
+	}
+
 	public function test_empty_batch_is_a_no_op_success_without_an_http_call() {
 		Functions\expect( 'wp_remote_post' )->never();
 		$client = new Idea89_Client( new Idea89_Config() );
@@ -120,7 +193,8 @@ class ClientTest extends TestCase {
 				Mockery::on(
 					function ( $args ) {
 						return 'sk_test_key' === $args['headers']['X-IDEA89-Key']
-							&& 'shop.example.test' === $args['headers']['X-IDEA89-Domain'];
+							&& 'shop.example.test' === $args['headers']['X-IDEA89-Domain']
+							&& '/' === $args['headers']['X-IDEA89-Site-Path'];
 					}
 				)
 			)
@@ -161,6 +235,29 @@ class ClientTest extends TestCase {
 		$this->assertFalse( $result['ok'] );
 		$this->assertStringContainsString( 'key', strtolower( $result['error'] ) );
 		$this->assertStringContainsString( '403', $result['error'] );
+	}
+
+	/**
+	 * The site_path_mismatch branch (a key that belongs to a different
+	 * IDEA89 account on the same host, per api/src/middleware/auth.ts) must
+	 * surface the API's message verbatim rather than the generic "key
+	 * rejected" wording, since that message is what names the site the key
+	 * actually belongs to.
+	 */
+	public function test_test_connection_surfaces_a_site_path_mismatch_message_verbatim() {
+		Functions\when( 'wp_remote_get' )->justReturn(
+			array(
+				'response' => array( 'code' => 403 ),
+				'body'     => '{"error":"site_path_mismatch","message":"This API key belongs to shop.example.test. The connecting site reports \"/wordpress\". Use the API key issued for that site."}',
+			)
+		);
+		$client = new Idea89_Client( new Idea89_Config() );
+		$result = $client->test_connection();
+		$this->assertFalse( $result['ok'] );
+		$this->assertSame(
+			'This API key belongs to shop.example.test. The connecting site reports "/wordpress". Use the API key issued for that site.',
+			$result['error']
+		);
 	}
 
 	public function test_test_connection_succeeds_on_200() {

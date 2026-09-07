@@ -1,0 +1,130 @@
+<?php
+/**
+ * The postMessage bridge that lets the framed checkout talk to the chat
+ * widget.
+ *
+ * Same envelope as the Magento 2 and Magento 1 modules:
+ * {source:'idea89-checkout', type:'ready'|'resize'|'error'|'success', ...}.
+ * `error` carries `code`; `success` carries `orderId`, `total`, `currency`.
+ * The widget's panel code (api/src/widget/checkout/index.ts) is the only
+ * reader of these messages and is not touched by this plugin — matching the
+ * envelope exactly is what makes this bridge work with it.
+ *
+ * Every script this class emits starts with `if(window.parent===window)
+ * {return;}` as its FIRST statement. That is deliberate and load-bearing:
+ * the thank-you page this bridge also runs on (see
+ * Idea89_Mini_Checkout::render_success_bridge()) is hit by every WooCommerce
+ * shopper, framed or not, on every order. A bridge that did anything before
+ * that check — even just building the payload — risks throwing on a normal,
+ * unframed purchase and breaking order confirmation for every merchant who
+ * installs this plugin.
+ *
+ * DELIBERATE DIVERGENCE FROM MAGENTO 2's Block\Checkout\Bridge: that class
+ * carries a single template and a `bridge_mode` layout argument
+ * ('handshake' vs 'success', defaulting to 'handshake' when missing or
+ * unrecognised) to tell the checkout page and the success page apart,
+ * because Magento renders both through the same block/template pair. Here
+ * there is no shared template to disambiguate: handshake_script() is called
+ * only from Idea89_Mini_Checkout::render_document() (the stripped checkout
+ * page) and success_script() is called only from that class's
+ * woocommerce_thankyou handler (the real thank-you page). The discriminator
+ * is which method the caller reaches, not a mode value read out of either
+ * one — so there is no "unrecognised mode" branch to default anywhere,
+ * because no branch exists at all. Functionally the same guarantee as
+ * Magento's default-to-handshake rule (an ambiguous or missing signal can
+ * never produce a false 'success'), just enforced by the call graph instead
+ * of by a value.
+ *
+ * @package Idea89
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Builds the four postMessage envelopes as inline <script> markup.
+ */
+class Idea89_Checkout_Bridge {
+
+	/**
+	 * Script for the stripped checkout page: announces `ready`, then reports
+	 * `resize` whenever the document height changes by more than a noise
+	 * threshold, so the parent frame can grow the panel to fit.
+	 *
+	 * @return string
+	 */
+	public function handshake_script() {
+		$js = '(function(){'
+			. 'if(window.parent===window){return;}'
+			. 'var post=function(m){try{window.parent.postMessage(m,window.location.origin);}catch(e){}};'
+			. "post({source:'idea89-checkout',type:'ready'});"
+			. 'var last=0;var send=function(){'
+			. 'var h=Math.ceil(document.documentElement.scrollHeight);'
+			. 'if(Math.abs(h-last)<12){return;}last=h;'
+			. "post({source:'idea89-checkout',type:'resize',height:h});};"
+			. 'send();'
+			. 'if(window.ResizeObserver){new ResizeObserver(send).observe(document.body);}'
+			. 'else{setInterval(send,600);}'
+			. '})();';
+
+		return '<script>' . $js . '</script>';
+	}
+
+	/**
+	 * Script for the merchant's real thank-you page. $order is the ONLY
+	 * signal this method trusts that an order genuinely completed; whether
+	 * the shopper is framed at all is decided entirely client-side by the
+	 * window.parent guard baked into every script this class emits, never by
+	 * anything read here.
+	 *
+	 * The caller (Idea89_Mini_Checkout::render_success_bridge()) is
+	 * responsible for confirming $order is a real, loaded order before
+	 * calling this — see that method's docblock for why session state alone
+	 * can never be trusted for that on WooCommerce, same trap as Magento 2's
+	 * getLastRealOrder().
+	 *
+	 * @param WC_Order $order The completed order.
+	 * @return string
+	 */
+	public function success_script( $order ) {
+		$payload = wp_json_encode(
+			array(
+				'source'   => 'idea89-checkout',
+				'type'     => 'success',
+				'orderId'  => (string) $order->get_order_number(),
+				'total'    => (string) $order->get_total(),
+				'currency' => (string) $order->get_currency(),
+			)
+		);
+
+		$js = '(function(){'
+			. 'if(window.parent===window){return;}'
+			. 'try{window.parent.postMessage(' . $payload . ',window.location.origin);}catch(e){}'
+			. '})();';
+
+		return '<script>' . $js . '</script>';
+	}
+
+	/**
+	 * A minimal same-origin document whose only job is to tell the framing
+	 * widget why the checkout will not render, so it falls back immediately
+	 * instead of waiting out the widget's 6-second handshake timeout. Same
+	 * envelope and shape as Magento 2's Controller\Checkout\Mini::bridgeError()
+	 * and the Magento 1 equivalent.
+	 *
+	 * @param string $code Machine-readable reason, e.g. 'empty_cart'.
+	 * @return string
+	 */
+	public function error_page( $code ) {
+		$payload = wp_json_encode(
+			array(
+				'source' => 'idea89-checkout',
+				'type'   => 'error',
+				'code'   => (string) $code,
+			)
+		);
+
+		return '<!doctype html><meta charset="utf-8"><title></title>'
+			. '<script>if(window.parent!==window){'
+			. 'window.parent.postMessage(' . $payload . ',window.location.origin);}</script>';
+	}
+}

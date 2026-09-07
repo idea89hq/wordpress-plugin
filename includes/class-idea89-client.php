@@ -49,15 +49,65 @@ class Idea89_Client {
 	}
 
 	/**
+	 * The site's base path, sent as X-IDEA89-Site-Path.
+	 *
+	 * A WordPress install in a subfolder (https://example.com/wordpress) is a
+	 * separate IDEA89 account from a shop at the domain root. The API uses this
+	 * to reject an API key issued for the other site on the same host.
+	 *
+	 * Returns '/' for a root install, '/wordpress' for a subfolder.
+	 *
+	 * DO NOT change the root value back to the empty string. libcurl treats a
+	 * header written as "Name: " (colon then only whitespace) as an instruction
+	 * to REMOVE that header, so an empty value never reaches the API at all —
+	 * and the API reads an absent header as "this plugin is too old to report a
+	 * path" and lets the request through. A root install would then be able to
+	 * sync into a subfolder store's catalog with the wrong API key, which is
+	 * the exact mix-up this header exists to stop. '/' survives the wire, and
+	 * the API's normalizeSitePath('/') returns '' — so it round-trips to the
+	 * same value a root store is registered with, and still matches.
+	 *
+	 * @return string
+	 */
+	public function site_path_header() {
+		$path = wp_parse_url( home_url(), PHP_URL_PATH );
+		if ( ! is_string( $path ) ) {
+			return '/';
+		}
+		$path = strtolower( rtrim( $path, '/' ) );
+		if ( '' === $path ) {
+			return '/';
+		}
+		return '/' === substr( $path, 0, 1 ) ? $path : '/' . $path;
+	}
+
+	/**
+	 * Human-readable identity of this site: 'example.com', or
+	 * 'example.com/wordpress' for a subfolder install.
+	 *
+	 * Mirrors displaySite() in the API, and is deliberately NOT the same string
+	 * as domain_header() . site_path_header(): the header reports '/' for a
+	 * root install so that it survives the wire, but a merchant should be shown
+	 * 'example.com', not 'example.com/'.
+	 *
+	 * @return string
+	 */
+	public function site_label() {
+		$path = $this->site_path_header();
+		return $this->domain_header() . ( '/' === $path ? '' : $path );
+	}
+
+	/**
 	 * Shared request headers.
 	 *
 	 * @return array<string, string>
 	 */
 	private function headers() {
 		return array(
-			'Content-Type'    => 'application/json',
-			'X-IDEA89-Key'    => $this->config->get_api_key(),
-			'X-IDEA89-Domain' => $this->domain_header(),
+			'Content-Type'       => 'application/json',
+			'X-IDEA89-Key'       => $this->config->get_api_key(),
+			'X-IDEA89-Domain'    => $this->domain_header(),
+			'X-IDEA89-Site-Path' => $this->site_path_header(),
 		);
 	}
 
@@ -118,6 +168,34 @@ class Idea89_Client {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Writes the shared checkout-display setting to the merchant's IDEA89
+	 * account, which is where it lives. WordPress holds only a render cache.
+	 *
+	 * Returns true only on a confirmed 2xx. The caller REVERTS the save when
+	 * this is false: quietly keeping a local value the dashboard never learned
+	 * about is the divergence this design exists to prevent.
+	 *
+	 * @param string $value Either 'full' or 'inline'.
+	 * @return bool
+	 */
+	public function update_checkout_ui( $value ) {
+		return $this->post( '/v1/plugin-settings', array( 'checkout_ui' => $value ) );
+	}
+
+	/**
+	 * Writes the shared assistant name to the merchant's IDEA89 account.
+	 *
+	 * Same contract as update_checkout_ui: true only on a confirmed 2xx, and
+	 * the caller reverts the save when it is false.
+	 *
+	 * @param string $value The name shown above the conversation.
+	 * @return bool
+	 */
+	public function update_assistant_name( $value ) {
+		return $this->post( '/v1/plugin-settings', array( 'assistant_name' => $value ) );
 	}
 
 	/**
@@ -287,7 +365,14 @@ class Idea89_Client {
 	 * the store's registered domain(s). This is the same endpoint the
 	 * dashboard's "products synced" count reads, so it costs nothing extra.
 	 *
-	 * @return array{ok: bool, error: string}
+	 * On success the response also names the connected site (host, or
+	 * host/path for a subfolder install), so a key pasted from another
+	 * IDEA89 account on the same host is visible immediately rather than
+	 * silently syncing into the wrong store. A 403 site_path_mismatch
+	 * response carries that same information in its message when the key
+	 * belongs to a rival site entirely.
+	 *
+	 * @return array{ok: bool, error: string, site?: string}
 	 */
 	public function test_connection() {
 		if ( ! $this->config->is_configured() ) {
@@ -302,8 +387,9 @@ class Idea89_Client {
 			array(
 				'timeout' => self::TIMEOUT,
 				'headers' => array(
-					'X-IDEA89-Key'    => $this->config->get_api_key(),
-					'X-IDEA89-Domain' => $this->domain_header(),
+					'X-IDEA89-Key'       => $this->config->get_api_key(),
+					'X-IDEA89-Domain'    => $this->domain_header(),
+					'X-IDEA89-Site-Path' => $this->site_path_header(),
 				),
 			)
 		);
@@ -323,13 +409,31 @@ class Idea89_Client {
 		$code = (int) wp_remote_retrieve_response_code( $response );
 
 		if ( 200 === $code ) {
+			$body = json_decode( wp_remote_retrieve_body( $response ), true );
 			return array(
 				'ok'    => true,
 				'error' => '',
+				'site'  => is_array( $body ) && isset( $body['site'] ) ? (string) $body['site'] : '',
 			);
 		}
 
 		$this->log( 'test_connection: HTTP ' . $code );
+
+		$body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+		if ( 403 === $code && is_array( $body ) && isset( $body['error'] ) && 'site_path_mismatch' === $body['error'] ) {
+			// The API's message names the site this key really belongs to —
+			// surfacing it verbatim is the whole point of the check, so it
+			// must not be flattened into the generic "key rejected" wording.
+			return array(
+				'ok'    => false,
+				'error' => isset( $body['message'] ) ? (string) $body['message'] : sprintf(
+					/* translators: %d: HTTP status code */
+					__( 'API key rejected (HTTP %d). Check your key.', 'idea89-ai-shopping-assistant' ),
+					$code
+				),
+			);
+		}
 
 		if ( 401 === $code || 403 === $code ) {
 			return array(

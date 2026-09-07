@@ -87,6 +87,9 @@ class Idea89_Plugin {
 		// it this early triggers the _load_textdomain_just_in_time notice on 6.7+.
 
 		require_once IDEA89_PLUGIN_DIR . 'includes/class-idea89-config.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/class-idea89-checkout-config.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/checkout/class-idea89-checkout-bridge.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/checkout/class-idea89-mini-checkout.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/class-idea89-client.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/class-idea89-scheduler.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/sync/class-idea89-product-serializer.php';
@@ -107,6 +110,8 @@ class Idea89_Plugin {
 		require_once IDEA89_PLUGIN_DIR . 'includes/personalization/class-idea89-personalization-config.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/personalization/class-idea89-identity-token.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/orders/class-idea89-order-endpoints.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/checkout/class-idea89-checkout-rest.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/acp/class-idea89-acp-feed.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/class-idea89-hooks.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/functions.php';
 
@@ -118,6 +123,8 @@ class Idea89_Plugin {
 
 		idea89_order_endpoints()->register();
 		idea89_locator_page()->register();
+		idea89_checkout_rest()->register();
+		idea89_acp_feed()->register();
 
 		// The dashboard settings cache is keyed to nothing but the store, so
 		// changing which store this site points at must drop it immediately
@@ -129,6 +136,9 @@ class Idea89_Plugin {
 
 		$widget = new Idea89_Widget( idea89_config() );
 		$widget->register();
+
+		$mini_checkout = new Idea89_Mini_Checkout( idea89_config(), new Idea89_Checkout_Config(), new Idea89_Checkout_Bridge() );
+		$mini_checkout->register();
 
 		if ( is_admin() ) {
 			require_once IDEA89_PLUGIN_DIR . 'includes/admin/class-idea89-admin-settings.php';

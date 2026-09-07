@@ -17,12 +17,17 @@ if ( ! class_exists( 'WP_Error' ) ) {
 	class WP_Error {
 		public $code;
 		public $message;
-		public function __construct( $code = '', $message = '' ) {
+		public $data;
+		public function __construct( $code = '', $message = '', $data = null ) {
 			$this->code    = $code;
 			$this->message = $message;
+			$this->data    = $data;
 		}
 		public function get_error_message() {
 			return $this->message;
+		}
+		public function get_error_data() {
+			return $this->data;
 		}
 	}
 }
@@ -33,6 +38,147 @@ if ( ! defined( 'DAY_IN_SECONDS' ) ) {
 
 if ( ! defined( 'HOUR_IN_SECONDS' ) ) {
 	define( 'HOUR_IN_SECONDS', 3600 );
+}
+
+if ( ! defined( 'MINUTE_IN_SECONDS' ) ) {
+	define( 'MINUTE_IN_SECONDS', 60 );
+}
+
+/**
+ * Minimal stand-ins for the WP REST API classes Task 6.5's checkout and ACP
+ * feed routes use. Real WordPress supplies these; Brain Monkey stubs only
+ * WordPress FUNCTIONS, not these classes, so both CheckoutRestTest.php and
+ * AcpFeedTest.php need them declared once, here, rather than each declaring
+ * their own and colliding with the other's declaration.
+ */
+if ( ! class_exists( 'WP_REST_Request' ) ) {
+	class WP_REST_Request {
+		/**
+		 * @var array<string,string>
+		 */
+		private $headers = array();
+
+		/**
+		 * @var array<string,mixed>
+		 */
+		private $json_params = array();
+
+		/**
+		 * @var array<string,mixed>
+		 */
+		private $params = array();
+
+		/**
+		 * @param string $key   Header name, any case.
+		 * @param string $value Header value.
+		 * @return void
+		 */
+		public function set_header( $key, $value ) {
+			$this->headers[ strtolower( (string) $key ) ] = (string) $value;
+		}
+
+		/**
+		 * @param string $key Header name, any case.
+		 * @return string|null
+		 */
+		public function get_header( $key ) {
+			$key = strtolower( (string) $key );
+			return isset( $this->headers[ $key ] ) ? $this->headers[ $key ] : null;
+		}
+
+		/**
+		 * @param array<string,mixed> $params Decoded JSON body.
+		 * @return void
+		 */
+		public function set_json_params( array $params ) {
+			$this->json_params = $params;
+		}
+
+		/**
+		 * @return array<string,mixed>
+		 */
+		public function get_json_params() {
+			return $this->json_params;
+		}
+
+		/**
+		 * @param string $key   Param name.
+		 * @param mixed  $value Param value.
+		 * @return void
+		 */
+		public function set_param( $key, $value ) {
+			$this->params[ $key ] = $value;
+		}
+
+		/**
+		 * @param string $key Param name.
+		 * @return mixed
+		 */
+		public function get_param( $key ) {
+			if ( array_key_exists( $key, $this->params ) ) {
+				return $this->params[ $key ];
+			}
+			return isset( $this->json_params[ $key ] ) ? $this->json_params[ $key ] : null;
+		}
+	}
+}
+
+if ( ! class_exists( 'WP_REST_Response' ) ) {
+	class WP_REST_Response {
+		/**
+		 * @var mixed
+		 */
+		public $data;
+
+		/**
+		 * @var int
+		 */
+		public $status;
+
+		/**
+		 * @var array<string,string>
+		 */
+		public $headers = array();
+
+		/**
+		 * @param mixed $data   Response body.
+		 * @param int   $status HTTP status code.
+		 */
+		public function __construct( $data = null, $status = 200 ) {
+			$this->data   = $data;
+			$this->status = $status;
+		}
+
+		/**
+		 * @return mixed
+		 */
+		public function get_data() {
+			return $this->data;
+		}
+
+		/**
+		 * @return int
+		 */
+		public function get_status() {
+			return $this->status;
+		}
+
+		/**
+		 * @param string $key   Header name.
+		 * @param string $value Header value.
+		 * @return void
+		 */
+		public function header( $key, $value ) {
+			$this->headers[ $key ] = $value;
+		}
+	}
+}
+
+if ( ! class_exists( 'WP_REST_Server' ) ) {
+	class WP_REST_Server {
+		const READABLE = 'GET';
+		const CREATABLE = 'POST';
+	}
 }
 
 /**

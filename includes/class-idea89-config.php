@@ -76,7 +76,12 @@ class Idea89_Config {
 	 * @return string
 	 */
 	public function get_assistant_name() {
-		$name = (string) get_option( 'idea89_assistant_name', '' );
+		// The account holds the real value; this option row is a render cache
+		// for when the API is unreachable. Reading remote-first keeps this in
+		// step with the name the widget header actually shows.
+		$remote = class_exists( 'Idea89_Remote_Config' ) ? Idea89_Remote_Config::assistant_name() : '';
+		$name   = '' !== $remote ? $remote : (string) get_option( 'idea89_assistant_name', '' );
+
 		return '' === trim( $name ) ? 'Shopping Assistant' : $name;
 	}
 

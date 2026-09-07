@@ -5,6 +5,124 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-26
+
+### Added
+- **Checkout experience setting.** `Idea89_Checkout_Config` reads a new
+  `idea89_checkout_mode` option (Off, Express handoff, Checkout in chat,
+  Native checkout, default Express) under a new "Checkout experience"
+  section on the settings screen, mirroring the Magento 2 module's ladder.
+  The storefront embed now also publishes `window.__IDEA89_CHECKOUT`
+  (platform, checkoutMode, cartPath, checkoutPath, miniCheckoutPath, formKey)
+  alongside the existing `window.__IDEA89_WC`, which is left untouched.
+  `cartPath`/`checkoutPath` are derived from `wc_get_cart_url()` /
+  `wc_get_checkout_url()` reduced to a path with `wp_parse_url()`, so a store
+  living in a subdirectory still resolves correctly against
+  `window.location.origin`. `formKey` carries the Store API nonce, since Woo
+  has no form-key equivalent.
+- **WooCommerce cart summary arm.** The shared widget's `_cartSummary()`
+  dispatch now resolves on WooCommerce via the Store API's own `/cart`
+  route (no new endpoint), returning the same `{count, subtotal, items}`
+  shape as the Magento arm. Formats the subtotal from
+  `totals.total_items` and `totals.currency_minor_unit` rather than
+  assuming two decimal places, so zero-decimal currencies (JPY) and
+  three-decimal currencies (KWD) both render correctly.
+- **Chrome-free checkout for the assistant panel.** `GET /?idea89-checkout=1`
+  serves the merchant's real WooCommerce checkout with the theme's header,
+  footer and navigation stripped out, for the chat widget to frame. Guards,
+  in order: plugin enabled and checkout mode is Embedded, the cart has at
+  least one item, and the checkout page renders through a recognised path.
+  Both `wp_head()` and `wp_footer()` still run, so WooCommerce's own scripts
+  and styles enqueue normally. `miniCheckoutPath` is now `/?idea89-checkout=1`
+  rather than empty.
+- **Block-versus-shortcode checkout detection.**
+  `Idea89_Mini_Checkout::detect_checkout_type()` probes the store's actual
+  checkout page for the WooCommerce Checkout block, then the classic
+  `[woocommerce_checkout]` shortcode, then falls back to `unknown`, which
+  the assistant panel treats as an immediate fallback rather than waiting
+  out its handshake timeout. A status line next to the checkout mode select
+  reports which one a store uses.
+- **postMessage bridge**, matching Magento 2 and Magento 1's contract
+  exactly: `ready`/`resize` on the stripped checkout, `success` (with the
+  order number, total and currency) on the real thank-you page, and a
+  same-origin error page carrying a machine-readable `code` for every guard
+  failure. The success hook fires on `woocommerce_thankyou`, which every
+  WooCommerce shopper reaches on every order, framed or not; the emitted
+  script's first statement is always `if (window.parent === window) return`,
+  so an ordinary unframed purchase is completely unaffected by it running.
+- Checkout in chat is a real, working rung: selecting it opens the framed
+  checkout above.
+- **Native checkout (beta) is a real, working rung too.** Selecting it lets
+  the assistant collect delivery details in the conversation and place the
+  order itself, over four new REST routes under `wp-json/idea89/v1/checkout`.
+  Payment methods are behind an allowlist under IDEA89 > Checkout experience
+  that is empty by default, so a freshly switched-on store places no orders
+  at all until you explicitly choose which methods the assistant may use.
+  Offline methods (cash on delivery, bank transfer, cheque) are recommended;
+  anything that needs a hosted payment page or a redirect cannot complete
+  inside the chat. Existing stores keep today's behaviour unless this
+  setting is changed.
+- **Agentic Commerce Protocol product feed**, off by default. A new setting
+  under IDEA89 > Agentic Commerce publishes your catalogue (names,
+  descriptions, prices, stock and page links) at
+  `wp-json/idea89/v1/acp/feed.json` in the Agentic Commerce Protocol shape,
+  so assistants such as ChatGPT can find and recommend your products. This
+  is separate from the checkout setting above and works alongside any of
+  those options. It does not give anyone access to your orders, customers
+  or payment details, and nothing is published until you turn it on.
+- **Assistant name now sets the name shoppers see.** The field under
+  Appearance used to save a value nothing read: the name above the
+  conversation came from your IDEA89 account, and this box changed nothing.
+  It is now that same name, so setting it here sets what shoppers see and how
+  the assistant refers to itself when asked.
+
+  Like Checkout display, it is stored in your IDEA89 account rather than in
+  WordPress, so it is the same in both places. If IDEA89 cannot be reached
+  when you save, nothing is changed and WordPress tells you why.
+
+- **Checkout display, shared with your IDEA89 dashboard.** A new field under
+  Checkout experience. **Full window** gives checkout the whole screen and
+  hides the conversation behind it; **In the chat** keeps checkout inside the
+  assistant panel alongside the conversation. Full window is the default and
+  is how the assistant has behaved so far, so nothing changes on upgrade.
+
+  This one setting lives in your IDEA89 account rather than in WordPress, and
+  the dashboard has the same field. Changing it in either place changes it in
+  both, so the two screens cannot show you different answers. If IDEA89 cannot
+  be reached when you save, nothing is changed and WordPress tells you why,
+  rather than storing a value your dashboard never learned about.
+
+- **Pinned checkout bar.** A new "Pinned checkout bar" checkbox under
+  IDEA89 > Checkout experience, defaulted on. When on, the assistant shows
+  a full-width bar above its message box reading "Checkout, N items,
+  total" whenever the shopper's basket has items. It is new persistent
+  chrome, so it can be switched off per store even though it only ever
+  appears on a basket with something in it. Tapping it goes through the
+  same checkout mode already configured above; it is a second,
+  always-visible way to reach checkout, not a new checkout path.
+
+### Fixed
+
+- **Uninstall now removes the checkout settings it used to leave behind.**
+  `uninstall.php` did not clear `idea89_checkout_mode`,
+  `idea89_checkout_bar_enabled`, `idea89_checkout_native_methods` or
+  `idea89_acp_enabled`, so those four survived removing the plugin. The one
+  that mattered is `idea89_acp_enabled`: it controls whether catalog data is
+  published for agentic commerce and it ships switched off, so a store that
+  had turned it on, uninstalled, and later reinstalled would have started
+  publishing again straight away, with no prompt and no notice, on an install
+  the merchant had every reason to read as fresh. All four are now removed
+  along with the rest of the plugin's settings.
+
+## [1.1.1] - 2026-08-18
+
+### Added
+- Sends the site's base path as `X-IDEA89-Site-Path`, so a WordPress install
+  in a subfolder is recognised as its own IDEA89 account rather than sharing
+  an identity with a shop at the domain root. Testing the connection now names
+  the site an API key belongs to, so a key pasted from the wrong site on the
+  same host is caught at setup instead of after a sync.
+
 ## [1.1.0] - 2026-08-18
 
 ### Added

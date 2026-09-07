@@ -129,6 +129,69 @@ class Idea89_Admin_Settings {
 	}
 
 	/**
+	 * Constrains the checkout experience to the four recognised rungs,
+	 * falling back to the shipped default (Express) for anything else —
+	 * same collapse rule as Idea89_Checkout_Config::get_mode().
+	 *
+	 * @param string $value Raw input.
+	 * @return string
+	 */
+	public static function sanitize_checkout_mode( $value ) {
+		$value = trim( (string) $value );
+		$modes = array(
+			Idea89_Checkout_Config::MODE_OFF,
+			Idea89_Checkout_Config::MODE_EXPRESS,
+			Idea89_Checkout_Config::MODE_EMBEDDED,
+			Idea89_Checkout_Config::MODE_NATIVE,
+		);
+		return in_array( $value, $modes, true ) ? $value : Idea89_Checkout_Config::MODE_EXPRESS;
+	}
+
+	/**
+	 * Constrains the submitted native-checkout payment methods to gateway
+	 * ids WooCommerce actually has registered.
+	 *
+	 * Intersecting against every REGISTERED gateway (not merely the
+	 * currently ENABLED ones) means allowlisting a gateway a merchant
+	 * later re-enables does not need this setting saved again — the REST
+	 * route itself (Idea89_Checkout_Rest::allowed_gateways()) is what
+	 * intersects against currently-available gateways at request time.
+	 *
+	 * @param mixed $value Raw submission.
+	 * @return string[]
+	 */
+	public static function sanitize_native_methods( $value ) {
+		if ( ! is_array( $value ) ) {
+			return array();
+		}
+
+		$available = self::available_gateway_ids();
+		$clean     = array_map( 'sanitize_key', $value );
+
+		return array_values( array_intersect( $clean, $available ) );
+	}
+
+	/**
+	 * Every payment gateway id WooCommerce has registered, regardless of
+	 * whether it is currently enabled.
+	 *
+	 * Deliberately checks WC() itself, not `empty( WC()->payment_gateways )`
+	 * — see Idea89_Checkout_Rest::allowed_gateways()'s docblock for why that
+	 * property-syntax check always reports empty regardless of state
+	 * (WooCommerce's WooCommerce class has __get() but no __isset(), so
+	 * empty()/isset() never even calls __get() for this key).
+	 *
+	 * @return string[]
+	 */
+	private static function available_gateway_ids() {
+		if ( ! function_exists( 'WC' ) || ! WC() ) {
+			return array();
+		}
+		$gateways = WC()->payment_gateways()->payment_gateways();
+		return is_array( $gateways ) ? array_keys( $gateways ) : array();
+	}
+
+	/**
 	 * Constrains the submitted post types to those actually selectable.
 	 *
 	 * Intersecting against available_post_types() rather than trusting the
@@ -174,9 +237,11 @@ class Idea89_Admin_Settings {
 				'type'              => 'string',
 				'sanitize_callback' => array( __CLASS__, 'sanitize_api_url' ),
 			),
+			// The push to IDEA89 lives in the sanitize callback, the only hook
+			// that can still refuse the value. See sanitize_assistant_name().
 			'idea89_assistant_name'               => array(
 				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => array( $this, 'sanitize_assistant_name' ),
 			),
 			'idea89_store_context'                => array(
 				'type'              => 'string',
@@ -189,6 +254,45 @@ class Idea89_Admin_Settings {
 			'idea89_brand_color'                  => array(
 				'type'              => 'string',
 				'sanitize_callback' => array( __CLASS__, 'sanitize_brand_color' ),
+			),
+			'idea89_checkout_mode'                => array(
+				'type'              => 'string',
+				'sanitize_callback' => array( __CLASS__, 'sanitize_checkout_mode' ),
+				'default'           => Idea89_Checkout_Config::MODE_EXPRESS,
+			),
+			'idea89_checkout_native_methods'      => array(
+				'type'              => 'array',
+				'sanitize_callback' => array( __CLASS__, 'sanitize_native_methods' ),
+				'default'           => Idea89_Checkout_Rest::DEFAULT_NATIVE_METHODS,
+			),
+			// Default true, matching the Magento 2 module's XML_CHECKOUT_BAR
+			// default (etc/config.xml). Needs a registered default AND an
+			// entry in default_value()'s $on_by_default list below for the
+			// same reason idea89_sync_categories etc. do — see that
+			// method's docblock for the fresh-install unchecked-checkbox bug
+			// this avoids.
+			'idea89_checkout_bar_enabled'         => array(
+				'type'              => 'boolean',
+				'sanitize_callback' => 'rest_sanitize_boolean',
+				'default'           => true,
+			),
+			// The push to IDEA89 lives in the sanitize callback because that
+			// is the only hook that can still REFUSE the value: returning the
+			// stored one reverts the save, which is what must happen when the
+			// API cannot be reached. See sanitize_checkout_ui().
+			'idea89_checkout_ui'                  => array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_checkout_ui' ),
+				'default'           => Idea89_Checkout_Config::UI_FULL,
+			),
+			// Default FALSE: publishing the whole catalogue publicly is never
+			// a default a merchant should discover after the fact — see
+			// Idea89_Acp_Feed's class docblock, matching Magento's
+			// XML_ACP_ENABLED default of 0 under the same reasoning.
+			'idea89_acp_enabled'                  => array(
+				'type'              => 'boolean',
+				'sanitize_callback' => 'rest_sanitize_boolean',
+				'default'           => false,
 			),
 			// Default true: a fresh install should sync categories, pages, store
 			// info and FAQs alongside products, not just products. The syncers
@@ -313,10 +417,38 @@ class Idea89_Admin_Settings {
 			self::PAGE_SLUG
 		);
 
-		$this->add_field( 'idea89_assistant_name', __( 'Assistant name', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_appearance' );
+		$this->add_field( 'idea89_assistant_name', __( 'Assistant name', 'idea89-ai-shopping-assistant' ), 'assistant_name', 'idea89_appearance' );
 		$this->add_field( 'idea89_widget_position', __( 'Position', 'idea89-ai-shopping-assistant' ), 'position', 'idea89_appearance' );
 		$this->add_field( 'idea89_brand_color', __( 'Brand colour', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_appearance' );
 		$this->add_field( 'idea89_store_context', __( 'Store context', 'idea89-ai-shopping-assistant' ), 'textarea', 'idea89_appearance' );
+
+		add_settings_section(
+			'idea89_checkout',
+			__( 'Checkout experience', 'idea89-ai-shopping-assistant' ),
+			array( $this, 'render_checkout_intro' ),
+			self::PAGE_SLUG
+		);
+
+		$this->add_field( 'idea89_checkout_mode', __( 'Assistant checkout mode', 'idea89-ai-shopping-assistant' ), 'checkout_mode', 'idea89_checkout' );
+		$this->add_field( 'idea89_checkout_ui', __( 'Checkout display', 'idea89-ai-shopping-assistant' ), 'checkout_ui', 'idea89_checkout' );
+		$this->add_field( 'idea89_checkout_bar_enabled', __( 'Pinned checkout bar', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_checkout' );
+
+		add_settings_field(
+			'idea89_checkout_native_methods',
+			__( 'Native checkout payment methods', 'idea89-ai-shopping-assistant' ),
+			array( $this, 'render_native_methods_field' ),
+			self::PAGE_SLUG,
+			'idea89_checkout'
+		);
+
+		add_settings_section(
+			'idea89_acp',
+			__( 'Agentic Commerce', 'idea89-ai-shopping-assistant' ),
+			array( $this, 'render_acp_intro' ),
+			self::PAGE_SLUG
+		);
+
+		$this->add_field( 'idea89_acp_enabled', __( 'Let AI agents shop your store', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_acp' );
 
 		add_settings_section(
 			'idea89_content',
@@ -358,7 +490,7 @@ class Idea89_Admin_Settings {
 			self::PAGE_SLUG
 		);
 
-		$this->add_field( 'idea89_personalization_enabled', __( 'Enable personalization', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_personalization' );
+		$this->add_field( 'idea89_personalization_enabled', __( 'Enable personalization', 'idea89-ai-shopping-assistant' ), 'personalization', 'idea89_personalization' );
 		$this->add_field( 'idea89_personalization_secret', __( 'Signing secret', 'idea89-ai-shopping-assistant' ), 'password', 'idea89_personalization' );
 
 		add_settings_section(
@@ -431,6 +563,67 @@ class Idea89_Admin_Settings {
 				'<div class="notice notice-info inline"><p>%s</p></div>',
 				esc_html__( 'The store finder is not available on your current plan, so the page stays hidden even when enabled here. Locations are managed in your IDEA89 dashboard.', 'idea89-ai-shopping-assistant' )
 			);
+		}
+	}
+
+	/**
+	 * Intro copy for the checkout experience section: what each rung on the
+	 * ladder does. Adapted from the Magento 2 module's system.xml comment for
+	 * the same setting, so a merchant running both products reads the same
+	 * choice described the same way.
+	 *
+	 * @return void
+	 */
+	public function render_checkout_intro() {
+		echo '<p>' . esc_html__( 'Choose how far the assistant carries a shopper towards a completed order. Each option below is a step up from the one before it, pick one.', 'idea89-ai-shopping-assistant' ) . '</p>';
+		echo '<p class="description"><strong>' . esc_html__( 'Off', 'idea89-ai-shopping-assistant' ) . '</strong> ' . esc_html__( 'when a shopper says "checkout", the assistant sends them to your cart page. This is how the assistant has always behaved.', 'idea89-ai-shopping-assistant' ) . '</p>';
+		echo '<p class="description"><strong>' . esc_html__( 'Express handoff', 'idea89-ai-shopping-assistant' ) . '</strong> ' . esc_html__( 'the assistant shows a basket summary in the chat and one button that goes straight to your checkout, skipping the cart page. No change to your checkout at all.', 'idea89-ai-shopping-assistant' ) . '</p>';
+		echo '<p class="description"><strong>' . esc_html__( 'Checkout in chat', 'idea89-ai-shopping-assistant' ) . '</strong> ' . esc_html__( 'your own WooCommerce checkout opens inside a panel over the chat. Your payment methods, your shipping rules, your extensions. IDEA89 never sees a card number.', 'idea89-ai-shopping-assistant' ) . '</p>';
+		echo '<p class="description"><strong>' . esc_html__( 'Native checkout (beta)', 'idea89-ai-shopping-assistant' ) . '</strong> ' . esc_html__( 'the assistant asks for delivery details in the conversation and places the order for you. Offline payment methods only unless you say otherwise. Best suited to trade and invoice-billed stores.', 'idea89-ai-shopping-assistant' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Pinned checkout bar: shows a full-width "Checkout, N items, total" bar above the message box whenever the shopper\'s basket has items. Works alongside the mode above and routes through the same checkout, it just gives the shopper a second, always-visible way to reach it. Hidden automatically on an empty basket.', 'idea89-ai-shopping-assistant' ) . '</p>';
+	}
+
+	/**
+	 * Intro copy for the Agentic Commerce section: what turning the feed on
+	 * publishes, and where. Adapted from the Magento 2 module's system.xml
+	 * comment for the same setting (acp_enabled), so a merchant running both
+	 * products reads the same choice described the same way. Off by
+	 * default — see Idea89_Acp_Feed's class docblock.
+	 *
+	 * @return void
+	 */
+	public function render_acp_intro() {
+		echo '<p>' . esc_html__( 'Publishes your catalogue in the Agentic Commerce Protocol format so assistants such as ChatGPT can find and recommend your products. This is separate from the assistant checkout mode above and works alongside any of those settings.', 'idea89-ai-shopping-assistant' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Turning this on makes your product names, descriptions, prices, stock and page links visible to any caller at a public web address. It does not give anyone access to your orders, customers or payment details.', 'idea89-ai-shopping-assistant' ) . '</p>';
+		if ( Idea89_Acp_Feed::is_enabled() ) {
+			printf(
+				'<p class="description">%s <code>%s</code></p>',
+				esc_html__( 'Your feed is published at', 'idea89-ai-shopping-assistant' ),
+				esc_html( rest_url( Idea89_Acp_Feed::REST_NAMESPACE . '/acp/feed.json' ) )
+			);
+		}
+	}
+
+	/**
+	 * Merchant-facing copy for the checkout type WooCommerce stores split
+	 * between — the classic `[woocommerce_checkout]` shortcode and the newer
+	 * Checkout block. Shown as a status line beside the mode select, using
+	 * Idea89_Mini_Checkout::detect_checkout_type()'s result, so a merchant
+	 * knows what to expect from Checkout in chat before turning it on.
+	 *
+	 * @param string $type 'block', 'shortcode', or 'unknown'.
+	 * @return string
+	 */
+	public static function checkout_probe_message( $type ) {
+		switch ( $type ) {
+			case 'block':
+				return __( 'Your checkout uses the WooCommerce Checkout block. Test the assistant panel on your storefront before going live.', 'idea89-ai-shopping-assistant' );
+
+			case 'shortcode':
+				return __( 'Your checkout uses the classic checkout shortcode, which works with the assistant panel.', 'idea89-ai-shopping-assistant' );
+
+			default:
+				return __( 'We could not identify your checkout page, so the assistant will send shoppers to it instead of showing it in the chat.', 'idea89-ai-shopping-assistant' );
 		}
 	}
 
@@ -518,6 +711,51 @@ class Idea89_Admin_Settings {
 	}
 
 	/**
+	 * Renders the native-checkout payment-method checkbox list, sourced
+	 * from every gateway WooCommerce has registered (not just the
+	 * currently enabled ones) — same reasoning as
+	 * sanitize_native_methods()'s docblock.
+	 *
+	 * @return void
+	 */
+	public function render_native_methods_field() {
+		// WC() itself, not `WC()->payment_gateways` (property syntax) — see
+		// available_gateway_ids()'s docblock above.
+		$gateways = ( function_exists( 'WC' ) && WC() )
+			? WC()->payment_gateways()->payment_gateways()
+			: array();
+
+		if ( empty( $gateways ) || ! is_array( $gateways ) ) {
+			echo '<p>' . esc_html__( 'No payment gateways found.', 'idea89-ai-shopping-assistant' ) . '</p>';
+			return;
+		}
+
+		$selected = get_option( 'idea89_checkout_native_methods', Idea89_Checkout_Rest::DEFAULT_NATIVE_METHODS );
+		$selected = is_array( $selected ) ? $selected : Idea89_Checkout_Rest::DEFAULT_NATIVE_METHODS;
+
+		// Same fix as render_post_types_field(): a hidden empty entry ahead
+		// of the real checkboxes guarantees the key survives a submission
+		// where every box is unchecked, so a merchant can clear the
+		// allowlist down to none.
+		echo '<input type="hidden" name="idea89_checkout_native_methods[]" value="" />';
+
+		foreach ( $gateways as $id => $gateway ) {
+			$label = ( is_object( $gateway ) && method_exists( $gateway, 'get_method_title' ) )
+				? $gateway->get_method_title()
+				: $id;
+
+			printf(
+				'<label style="display:block;margin-bottom:4px"><input type="checkbox" name="idea89_checkout_native_methods[]" value="%1$s" %2$s /> %3$s</label>',
+				esc_attr( $id ),
+				checked( in_array( $id, $selected, true ), true, false ),
+				esc_html( $label )
+			);
+		}
+
+		echo '<p class="description">' . esc_html__( 'Nothing is selected by default, which means the assistant will not place orders at all until you choose one. Only offline methods are recommended here. The assistant places the order directly, so a method that needs a hosted payment page or a redirect cannot complete inside the chat.', 'idea89-ai-shopping-assistant' ) . '</p>';
+	}
+
+	/**
 	 * Renders the post-type checkbox list.
 	 *
 	 * @return void
@@ -585,6 +823,14 @@ class Idea89_Admin_Settings {
 			'idea89_sync_store_info',
 			'idea89_sync_faqs',
 			'idea89_order_tracking_show_button',
+			// Matches Magento's XML_CHECKOUT_BAR default of 1 (etc/config.xml).
+			// Needs to be here for the same reason as the four sync toggles
+			// above: without it, render_field() would show the checkbox
+			// unchecked on a fresh install even though
+			// Idea89_Checkout_Config::is_checkout_bar_enabled() reads the
+			// option with a `true` fallback, and the first settings save
+			// would persist that wrong unchecked state.
+			'idea89_checkout_bar_enabled',
 		);
 
 		if ( in_array( $name, $on_by_default, true ) ) {
@@ -599,6 +845,10 @@ class Idea89_Admin_Settings {
 			return Idea89_Locator_Config::DEFAULT_URL_PATH;
 		}
 
+		if ( 'idea89_checkout_mode' === $name ) {
+			return Idea89_Checkout_Config::MODE_EXPRESS;
+		}
+
 		$locator_default = Idea89_Locator_Config::default_for( $name );
 
 		if ( '' !== $locator_default ) {
@@ -606,6 +856,136 @@ class Idea89_Admin_Settings {
 		}
 
 		return '';
+	}
+
+	/**
+	/**
+	 * Validates the checkout display value and writes it to IDEA89.
+	 *
+	 * The value belongs to the merchant's IDEA89 account; the option row here
+	 * is a render cache for when the API is unreachable. So a failed push must
+	 * REVERT the save rather than store a value the dashboard never learned
+	 * about, which would leave the two screens disagreeing. Returning the
+	 * currently stored value is how WordPress's Settings API expresses that.
+	 *
+	 * @param mixed $value Raw submitted value.
+	 * @return string
+	 */
+	/**
+	 * Validates the assistant name and writes it to IDEA89.
+	 *
+	 * The name belongs to the merchant's IDEA89 account: it is what the widget
+	 * shows above the conversation and how the assistant refers to itself. The
+	 * option row here is a render cache, so a failed push must REVERT rather
+	 * than store a name the dashboard never learned about, which is how the
+	 * header and the assistant's own answer end up disagreeing.
+	 *
+	 * Bounds match the dashboard's 1..100 exactly, so neither side can store a
+	 * name the other would refuse.
+	 *
+	 * @param mixed $value Raw submitted value.
+	 * @return string
+	 */
+	public function sanitize_assistant_name( $value ) {
+		$stored = (string) get_option( 'idea89_assistant_name', '' );
+		$value  = is_string( $value ) ? trim( sanitize_text_field( $value ) ) : '';
+
+		if ( '' === $value ) {
+			add_settings_error(
+				'idea89_assistant_name',
+				'idea89_assistant_name_empty',
+				__( 'Enter a name for the assistant. It is shown above the conversation.', 'idea89-ai-shopping-assistant' )
+			);
+			return $stored;
+		}
+
+		if ( function_exists( 'mb_strlen' ) ? mb_strlen( $value ) > 100 : strlen( $value ) > 100 ) {
+			add_settings_error(
+				'idea89_assistant_name',
+				'idea89_assistant_name_too_long',
+				__( 'Keep the assistant name to 100 characters or fewer.', 'idea89-ai-shopping-assistant' )
+			);
+			return $stored;
+		}
+
+		if ( $value === $stored ) {
+			return $stored;
+		}
+
+		if ( ! $this->push_assistant_name( $value ) ) {
+			add_settings_error(
+				'idea89_assistant_name',
+				'idea89_assistant_name_unreachable',
+				__( 'Could not reach IDEA89 to save the assistant name, so nothing was changed. This name is shared with your IDEA89 dashboard, and saving it here only in WordPress would leave the two showing different names. Check your connection and try again.', 'idea89-ai-shopping-assistant' )
+			);
+			return $stored;
+		}
+
+		return $value;
+	}
+
+	/**
+	 * Sends the name to IDEA89. A seam, for the same reason as
+	 * push_checkout_ui(): idea89_client() cannot be stubbed.
+	 *
+	 * @param string $value The name.
+	 * @return bool
+	 */
+	protected function push_assistant_name( $value ) {
+		return idea89_client()->update_assistant_name( $value );
+	}
+
+	/**
+	 * Sends the value to IDEA89.
+	 *
+	 * A seam, not indirection for its own sake: idea89_client() is defined in
+	 * functions.php, which loads before Patchwork, so it cannot be stubbed and
+	 * the revert-on-failure behaviour would otherwise be untestable.
+	 *
+	 * @param string $value Either 'full' or 'inline'.
+	 * @return bool
+	 */
+	protected function push_checkout_ui( $value ) {
+		return idea89_client()->update_checkout_ui( $value );
+	}
+
+	/**
+	 * Validates the checkout display value and writes it to IDEA89.
+	 *
+	 * @param mixed $value Raw submitted value.
+	 * @return string
+	 */
+	public function sanitize_checkout_ui( $value ) {
+		$stored = (string) get_option( 'idea89_checkout_ui', Idea89_Checkout_Config::UI_FULL );
+		$value  = is_string( $value ) ? $value : '';
+
+		if ( ! in_array( $value, array( Idea89_Checkout_Config::UI_FULL, Idea89_Checkout_Config::UI_INLINE ), true ) ) {
+			add_settings_error(
+				'idea89_checkout_ui',
+				'idea89_checkout_ui_invalid',
+				__( 'Choose either Full window or In the chat.', 'idea89-ai-shopping-assistant' )
+			);
+			return $stored;
+		}
+
+		// Unchanged means nothing to sync. WordPress runs the sanitize
+		// callback on every save of the page, not only when this field was
+		// touched, so without this an unrelated edit would fail whenever the
+		// API happened to be slow.
+		if ( $value === $stored ) {
+			return $stored;
+		}
+
+		if ( ! $this->push_checkout_ui( $value ) ) {
+			add_settings_error(
+				'idea89_checkout_ui',
+				'idea89_checkout_ui_unreachable',
+				__( 'Could not reach IDEA89 to save the checkout display setting, so nothing was changed. This setting is shared with your IDEA89 dashboard, and saving it here only in WordPress would leave the two showing different values. Check your connection and try again.', 'idea89-ai-shopping-assistant' )
+			);
+			return $stored;
+		}
+
+		return $value;
 	}
 
 	/**
@@ -638,6 +1018,20 @@ class Idea89_Admin_Settings {
 	 */
 	public function render_general_intro() {
 		echo '<p>' . esc_html__( 'Paste the API key from your IDEA89 dashboard. No data leaves this site until a key is saved.', 'idea89-ai-shopping-assistant' ) . '</p>';
+
+		// A WordPress install in a folder is a separate IDEA89 account from a
+		// shop at the domain root, so the merchant needs to see exactly which
+		// site this one reports as before choosing a key.
+		$client = idea89_client();
+		// site_label(), not domain_header() . site_path_header(): the header
+		// carries '/' for a root install so libcurl cannot drop it, which would
+		// show the merchant a stray trailing slash here.
+		$site = $client->site_label();
+		echo '<p class="description">' . sprintf(
+			/* translators: %s: this site's host and base path, e.g. example.com/wordpress */
+			esc_html__( 'This site reports as %s. Use the API key issued for that exact site.', 'idea89-ai-shopping-assistant' ),
+			'<code>' . esc_html( $site ) . '</code>'
+		) . '</p>';
 	}
 
 	/**
@@ -692,6 +1086,131 @@ class Idea89_Admin_Settings {
 					);
 				}
 				echo '</select>';
+				break;
+
+			case 'personalization':
+				// Personalization needs BOTH halves on: WordPress signs and
+				// sends the shopper identity token, the IDEA89 account accepts
+				// it. The dashboard has a switch with the same name, so a
+				// merchant reading either screen alone sees one word and
+				// concludes that is the state of the feature. Say what both
+				// halves are actually doing.
+				printf(
+					'<label><input type="checkbox" name="%1$s" value="1" %2$s /> %3$s</label>',
+					esc_attr( $name ),
+					checked( $value, true, false ),
+					esc_html__( 'Enabled', 'idea89-ai-shopping-assistant' )
+				);
+				$here_on  = (bool) $value;
+				$there_on = Idea89_Remote_Config::personalization_enabled();
+				echo '<p class="description">'
+					. esc_html__( 'Personalization needs two switches on, one here and one in your IDEA89 dashboard. This page controls the WordPress half: whether your storefront signs and sends the shopper identity token.', 'idea89-ai-shopping-assistant' )
+					. '</p>';
+				if ( null === $there_on ) {
+					echo '<p class="description">'
+						. esc_html__( 'IDEA89 could not be reached, so the state of the other half is unknown. Check it in your dashboard under Personalization.', 'idea89-ai-shopping-assistant' )
+						. '</p>';
+				} elseif ( $here_on && $there_on ) {
+					echo '<p class="description"><strong>'
+						. esc_html__( 'Both halves are on, so personalization is live.', 'idea89-ai-shopping-assistant' )
+						. '</strong></p>';
+				} elseif ( ! $here_on && ! $there_on ) {
+					echo '<p class="description"><strong>'
+						. esc_html__( 'Both halves are off.', 'idea89-ai-shopping-assistant' )
+						. '</strong> '
+						. esc_html__( 'Turning this one on is not enough on its own; switch it on in your dashboard too.', 'idea89-ai-shopping-assistant' )
+						. '</p>';
+				} else {
+					echo '<p class="description"><strong>'
+						. esc_html__( 'Only one half is on, so personalization is not running.', 'idea89-ai-shopping-assistant' )
+						. '</strong> '
+						. sprintf(
+							/* translators: 1: on or off for this site, 2: on or off for the IDEA89 account */
+							esc_html__( 'WordPress is %1$s and your IDEA89 account is %2$s. Both need to be on.', 'idea89-ai-shopping-assistant' ),
+							$here_on ? esc_html__( 'on', 'idea89-ai-shopping-assistant' ) : esc_html__( 'off', 'idea89-ai-shopping-assistant' ),
+							$there_on ? esc_html__( 'on', 'idea89-ai-shopping-assistant' ) : esc_html__( 'off', 'idea89-ai-shopping-assistant' )
+						)
+						. '</p>';
+				}
+				break;
+
+			case 'assistant_name':
+				// Render what IDEA89 holds, so a change made in the dashboard
+				// shows here without the merchant doing anything.
+				$remote_name = Idea89_Remote_Config::assistant_name();
+				if ( '' !== $remote_name ) {
+					$value = $remote_name;
+				}
+				printf(
+					'<input type="text" name="%1$s" value="%2$s" class="regular-text" autocomplete="off" maxlength="100" />',
+					esc_attr( $name ),
+					esc_attr( $value )
+				);
+				echo '<p class="description">'
+					. esc_html__( 'The name shown above the conversation, e.g. "Aria" or "Shop Helper". It is also how the assistant refers to itself when a shopper asks.', 'idea89-ai-shopping-assistant' )
+					. '</p>';
+				echo '<p class="description"><strong>'
+					. esc_html__( 'Shared with your IDEA89 dashboard.', 'idea89-ai-shopping-assistant' )
+					. '</strong> '
+					. esc_html__( 'This name is stored in your IDEA89 account rather than in WordPress, so it is the same in both places. If IDEA89 cannot be reached when you save, nothing is changed and you will see a message saying so.', 'idea89-ai-shopping-assistant' )
+					. '</p>';
+				break;
+
+			case 'checkout_ui':
+				// Render what IDEA89 actually holds, so a change made in the
+				// dashboard shows up here without the merchant doing
+				// anything. Falls back to the local cache when the API is
+				// unreachable: showing the last known value beats an error on
+				// a settings screen.
+				$remote_ui = Idea89_Remote_Config::checkout_ui();
+				if ( '' !== $remote_ui ) {
+					$value = $remote_ui;
+				}
+				echo '<select name="' . esc_attr( $name ) . '">';
+				foreach ( array(
+					Idea89_Checkout_Config::UI_FULL   => __( 'Full window', 'idea89-ai-shopping-assistant' ),
+					Idea89_Checkout_Config::UI_INLINE => __( 'In the chat', 'idea89-ai-shopping-assistant' ),
+				) as $ui_key => $ui_label ) {
+					printf(
+						'<option value="%1$s" %2$s>%3$s</option>',
+						esc_attr( $ui_key ),
+						selected( $value, $ui_key, false ),
+						esc_html( $ui_label )
+					);
+				}
+				echo '</select>';
+				echo '<p class="description"><strong>'
+					. esc_html__( 'Shared with your IDEA89 dashboard.', 'idea89-ai-shopping-assistant' )
+					. '</strong> '
+					. esc_html__( 'This setting is stored in your IDEA89 account rather than in WordPress, so it is the same value in both places: changing it here updates your dashboard, and changing it in the dashboard updates this field. If IDEA89 cannot be reached when you save, nothing is changed and you will see a message saying so.', 'idea89-ai-shopping-assistant' )
+					. '</p>';
+				echo '<p class="description">'
+					. esc_html__( 'Full window gives checkout the whole screen and hides the conversation behind it. In the chat keeps checkout inside the assistant panel alongside the conversation.', 'idea89-ai-shopping-assistant' )
+					. '</p>';
+				break;
+
+			case 'checkout_mode':
+				echo '<select name="' . esc_attr( $name ) . '">';
+				foreach ( array(
+					Idea89_Checkout_Config::MODE_OFF      => __( 'Off', 'idea89-ai-shopping-assistant' ),
+					/* translators: marks the shipped default option in the checkout mode dropdown */
+					Idea89_Checkout_Config::MODE_EXPRESS  => __( 'Express handoff (default)', 'idea89-ai-shopping-assistant' ),
+					Idea89_Checkout_Config::MODE_EMBEDDED => __( 'Checkout in chat', 'idea89-ai-shopping-assistant' ),
+					Idea89_Checkout_Config::MODE_NATIVE   => __( 'Native checkout (beta)', 'idea89-ai-shopping-assistant' ),
+				) as $key => $label ) {
+					printf(
+						'<option value="%1$s" %2$s>%3$s</option>',
+						esc_attr( $key ),
+						selected( $value, $key, false ),
+						esc_html( $label )
+					);
+				}
+				echo '</select>';
+
+				if ( class_exists( 'Idea89_Mini_Checkout' ) ) {
+					$type = Idea89_Mini_Checkout::detect_checkout_type();
+					echo '<p class="description">' . esc_html( self::checkout_probe_message( $type ) ) . '</p>';
+				}
 				break;
 
 			case 'slug':

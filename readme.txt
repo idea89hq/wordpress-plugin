@@ -5,7 +5,7 @@ Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -137,6 +137,14 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 
 == Changelog ==
 
+= 1.2.0 =
+* **Checkout experience.** New setting under IDEA89 > Checkout experience, matching the Magento 2 module. Express handoff is the default: after adding to basket, the assistant shows a basket summary card in chat with one button straight to your checkout. Checkout in chat opens your real WooCommerce checkout inside the assistant panel, with your site's header, footer and navigation stripped away so it fits the panel cleanly. Your payment methods, your shipping rules, your extensions all run exactly as they do on your normal checkout page; IDEA89 never sees a card number. Works whether your checkout page uses the classic checkout shortcode or the WooCommerce Checkout block; a settings screen status line beside the mode select tells you which one your store uses. If your checkout page uses neither, the assistant sends shoppers to it directly instead of showing it in the chat. Native checkout (beta) is also a real, working rung: the assistant collects delivery details in the conversation and places the order itself, on payment methods you choose from an allowlist that is empty by default, so a freshly switched-on store places no orders at all until you explicitly select one. Offline methods (cash on delivery, bank transfer, cheque) are recommended. Existing stores keep today's behaviour unless this setting is changed.
+* **Agentic Commerce Protocol product feed.** New setting under IDEA89 > Agentic Commerce, off by default. Publishes your catalogue (names, descriptions, prices, stock and page links) at a public web address in the Agentic Commerce Protocol shape, so assistants such as ChatGPT can find and recommend your products. Works alongside any checkout experience setting. Does not give anyone access to your orders, customers or payment details, and nothing is published until you turn it on.
+* **Pinned checkout bar.** New "Pinned checkout bar" setting under IDEA89 > Checkout experience, on by default. Shows a full-width bar above the assistant's message box reading "Checkout, N items, total" whenever the shopper's basket has items. Tapping it goes through the same checkout mode you already chose above; it is simply a second, always-visible way to reach checkout.
+
+= 1.1.1 =
+* A WordPress install in a subfolder is now recognised as its own IDEA89 account, separate from a shop at the domain root. Test Connection names the site an API key belongs to, so a key pasted from the wrong site on the same domain is caught during setup rather than after a sync.
+
 = 1.1.0 =
 * **Order tracking.** Shoppers can ask "where is my order?" in the chat and see their own order status, delivery progress and tracking links. Order details are read by the shopper's browser directly from your site and are never sent to IDEA89 or to any AI provider. Signed-in shoppers see their recent orders; guests can look up one order with its number and the email used to place it. Off by default.
 * **Store finder page.** Publishes a searchable map of your stores at a URL you choose, styled to your brand and using your own theme's header and footer, with structured data so search engines can read your store details. Off by default.
@@ -159,6 +167,12 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 * Initial release. Catalogue, category, page, coupon, FAQ and content sync; storefront chat widget with WooCommerce Store API add-to-cart; admin settings with Test Connection and Sync Now.
 
 == Upgrade Notice ==
+
+= 1.2.0 =
+Adds the Assistant checkout mode setting (default: Express handoff), an Agentic Commerce product feed setting (default: off), and a pinned checkout bar above the assistant's message box (default: on, shown only when the basket has items). No change to your checkout or your catalogue's visibility, beyond the new bar, unless you switch one of the other settings on.
+
+= 1.1.1 =
+Recognises a subfolder install as its own account and names the connected site when you test your key. No change if your shop is at the domain root.
 
 = 1.1.0 =
 Adds order tracking, a store finder page and shopper personalization. All three are off until you switch them on, so nothing changes on upgrade.

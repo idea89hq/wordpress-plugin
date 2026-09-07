@@ -41,6 +41,15 @@ $idea89_options = array(
 	'idea89_locator_help_body',
 	'idea89_locator_help_cta_label',
 	'idea89_locator_help_cta_url',
+	// Checkout ladder. idea89_acp_enabled is the one that matters most:
+	// it gates publishing catalog data to third parties and ships off, so
+	// leaving it behind means an uninstall followed by a reinstall quietly
+	// resumes publishing instead of starting from that default.
+	'idea89_checkout_mode',
+	'idea89_checkout_ui',
+	'idea89_checkout_bar_enabled',
+	'idea89_checkout_native_methods',
+	'idea89_acp_enabled',
 );
 
 foreach ( $idea89_options as $idea89_option ) {

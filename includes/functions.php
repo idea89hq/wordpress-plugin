@@ -212,3 +212,48 @@ function idea89_locator_page() {
 
 	return $page;
 }
+
+/**
+ * Shared checkout experience settings accessor.
+ *
+ * @return Idea89_Checkout_Config
+ */
+function idea89_checkout_config() {
+	static $config = null;
+
+	if ( null === $config ) {
+		$config = new Idea89_Checkout_Config();
+	}
+
+	return $config;
+}
+
+/**
+ * Shared native-checkout REST route handler (Task 6.5).
+ *
+ * @return Idea89_Checkout_Rest
+ */
+function idea89_checkout_rest() {
+	static $rest = null;
+
+	if ( null === $rest ) {
+		$rest = new Idea89_Checkout_Rest( idea89_config(), idea89_checkout_config() );
+	}
+
+	return $rest;
+}
+
+/**
+ * Shared ACP feed route handler (Task 6.5).
+ *
+ * @return Idea89_Acp_Feed
+ */
+function idea89_acp_feed() {
+	static $feed = null;
+
+	if ( null === $feed ) {
+		$feed = new Idea89_Acp_Feed();
+	}
+
+	return $feed;
+}
