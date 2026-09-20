@@ -5,6 +5,103 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-09-20
+
+### Security
+- **`__IDEA89_WC` is JSON-encoded like every other inline value.**
+  `Idea89_Widget::config_js()` built the Store API URL, nonce and basket
+  URL into a hand-written object literal through `esc_js()`. That function
+  is for attribute context (`onclick="..."`): it turns `& < >` into HTML
+  entities, which a `<script>` element does not decode, so a URL carrying
+  a query string would have reached the widget corrupted, and the 1.2.2
+  hex-escaping did not cover it. The object now goes through
+  `wp_json_encode()` with `JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
+  JSON_HEX_QUOT`, exactly as `__IDEA89_CHECKOUT` already did. Same three
+  keys (`storeApi`, `nonce`, `cartUrl`), same values on the JS side.
+  Second finding from the wordpress.org plugin review.
+
+### Changed
+- **The stripped checkout page is printed, not buffered and echoed.**
+  `Idea89_Mini_Checkout::render()` used to assemble the whole document
+  (buffered `wp_head()` and `wp_footer()`, the checkout markup, the bridge
+  script) into one string that `maybe_render()` then echoed under a phpcs
+  suppression. It now prints the way a page template does: literal
+  markup, `wp_head()` and `wp_footer()` printing themselves, the handshake
+  and error envelopes printed by `wp_print_inline_script_tag()`, the
+  shortcode checkout by `do_shortcode()` and the block checkout by
+  `do_blocks()`. The one remaining unescaped echo is the rendered Checkout
+  block, which is WooCommerce's own form (the same HTML `the_content()`
+  prints for the page) and cannot go through `wp_kses_post()` without
+  breaking. Headers are sent before the first byte, as before.
+  `Idea89_Checkout_Bridge` drops the string-returning `handshake_script()`,
+  `success_script()` and `error_page()` wrappers; `error_page()` becomes
+  `print_error_page()` and the `*_js()` builders are the only script API.
+  Same page, same headers, same bridge messages.
+
+## [1.2.2] - 2026-09-13
+
+### Changed
+- **Widget loader is enqueued, not printed.** `Idea89_Widget` now hooks
+  `wp_enqueue_scripts`: the loader is registered with
+  `wp_register_script()` (footer, `strategy => async`, no `?ver=` because
+  the API versions it), the `__IDEA89_PLATFORM` / `__IDEA89_WC` /
+  `__IDEA89_CHECKOUT` block is attached with
+  `wp_add_inline_script( ..., 'before' )` so it still runs first, and the
+  `data-key` / `data-position` / `data-color` attributes are added through
+  the `wp_script_attributes` filter, scoped to our handle. The JavaScript
+  the browser receives is unchanged; `__IDEA89_WC` is byte-identical.
+- **Bridge scripts are built by core.** `Idea89_Checkout_Bridge` returns
+  JavaScript from `handshake_js()`, `success_js()` and `error_js()`; the
+  `<script>` element around each comes from `wp_get_inline_script_tag()` or
+  `wp_print_inline_script_tag()`, never from a hand-written tag. The
+  `*_script()` / `error_page()` methods remain and now delegate to those.
+- **Store finder analytics hook and JSON-LD** are printed through
+  `wp_print_inline_script_tag()`; `analytics_script()` is now public static.
+
+### Security
+- **Inline JSON can no longer close its own script element.** Every
+  `wp_json_encode()` whose output lands inside a `<script>` now passes
+  `JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT`, so a
+  configured API base URL or key, a store name in the JSON-LD, or an order
+  number rewritten by another plugin cannot carry a `</script>` that
+  terminates the block and injects markup. `\u003C` is still the same value
+  to JavaScript and to every JSON-LD consumer. Found in the wordpress.org
+  plugin review; the same pattern was fixed everywhere it appeared, not only
+  at the two locations reported.
+
+## [1.2.1] - 2026-09-13
+
+### Added
+- **Assistant name now sets the name shoppers see.** The field under
+  Appearance used to save a value nothing read: the name above the
+  conversation came from your IDEA89 account, and this box changed nothing.
+  It is now that same name, so setting it here sets what shoppers see and how
+  the assistant refers to itself when asked.
+
+  Like Checkout display, it is stored in your IDEA89 account rather than in
+  WordPress, so it is the same in both places. If IDEA89 cannot be reached
+  when you save, nothing is changed and WordPress tells you why.
+
+- **Checkout display, shared with your IDEA89 dashboard.** A new field under
+  Checkout experience. **Full window** gives checkout the whole screen and
+  hides the conversation behind it; **In the chat** keeps checkout inside the
+  assistant panel alongside the conversation. Full window is the default and
+  is how the assistant has behaved so far, so nothing changes on upgrade.
+
+  This one setting lives in your IDEA89 account rather than in WordPress, and
+  the dashboard has the same field. Changing it in either place changes it in
+  both, so the two screens cannot show you different answers. If IDEA89 cannot
+  be reached when you save, nothing is changed and WordPress tells you why,
+  rather than storing a value your dashboard never learned about.
+
+### Changed
+- **Personalization status is spelled out on the settings screen.**
+  Personalization needs two switches on, one in WordPress and one in the
+  IDEA89 dashboard, and the settings screen now says which half is on and
+  which is off, so a store where only one is on is no longer told nothing.
+  If IDEA89 cannot be reached, it says the state of the other half is
+  unknown rather than guessing.
+
 ## [1.2.0] - 2026-08-26
 
 ### Added
@@ -70,28 +167,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is separate from the checkout setting above and works alongside any of
   those options. It does not give anyone access to your orders, customers
   or payment details, and nothing is published until you turn it on.
-- **Assistant name now sets the name shoppers see.** The field under
-  Appearance used to save a value nothing read: the name above the
-  conversation came from your IDEA89 account, and this box changed nothing.
-  It is now that same name, so setting it here sets what shoppers see and how
-  the assistant refers to itself when asked.
-
-  Like Checkout display, it is stored in your IDEA89 account rather than in
-  WordPress, so it is the same in both places. If IDEA89 cannot be reached
-  when you save, nothing is changed and WordPress tells you why.
-
-- **Checkout display, shared with your IDEA89 dashboard.** A new field under
-  Checkout experience. **Full window** gives checkout the whole screen and
-  hides the conversation behind it; **In the chat** keeps checkout inside the
-  assistant panel alongside the conversation. Full window is the default and
-  is how the assistant has behaved so far, so nothing changes on upgrade.
-
-  This one setting lives in your IDEA89 account rather than in WordPress, and
-  the dashboard has the same field. Changing it in either place changes it in
-  both, so the two screens cannot show you different answers. If IDEA89 cannot
-  be reached when you save, nothing is changed and WordPress tells you why,
-  rather than storing a value your dashboard never learned about.
-
 - **Pinned checkout bar.** A new "Pinned checkout bar" checkbox under
   IDEA89 > Checkout experience, defaulted on. When on, the assistant shows
   a full-width bar above its message box reading "Checkout, N items,

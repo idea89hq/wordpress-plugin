@@ -24,10 +24,10 @@
  * ('handshake' vs 'success', defaulting to 'handshake' when missing or
  * unrecognised) to tell the checkout page and the success page apart,
  * because Magento renders both through the same block/template pair. Here
- * there is no shared template to disambiguate: handshake_script() is called
- * only from Idea89_Mini_Checkout::render_document() (the stripped checkout
- * page) and success_script() is called only from that class's
- * woocommerce_thankyou handler (the real thank-you page). The discriminator
+ * there is no shared template to disambiguate: handshake_js() is printed
+ * only from Idea89_Mini_Checkout::print_document() (the stripped checkout
+ * page) and success_js() only from that class's woocommerce_thankyou
+ * handler (the real thank-you page). The discriminator
  * is which method the caller reaches, not a mode value read out of either
  * one — so there is no "unrecognised mode" branch to default anywhere,
  * because no branch exists at all. Functionally the same guarantee as
@@ -41,19 +41,34 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Builds the four postMessage envelopes as inline <script> markup.
+ * Builds the postMessage envelopes the framed checkout sends its parent.
+ *
+ * Each *_js() method returns JavaScript only. The <script> element around
+ * it is always printed by core's wp_print_inline_script_tag(), here or at
+ * the call site — never built by hand and never buffered into a string
+ * that is echoed later. Every JSON payload is encoded with the JSON_HEX_*
+ * flags so that no value (an order number rewritten by another plugin,
+ * say) can carry a "</script>" that closes the element early.
  */
 class Idea89_Checkout_Bridge {
 
 	/**
+	 * Flags for wp_json_encode() when the JSON lands inside a <script> element.
+	 * < > & ' " become \u003C etc.: still the same value to JavaScript,
+	 * invisible to the HTML parser.
+	 */
+	const JSON_FLAGS = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+
+	/**
 	 * Script for the stripped checkout page: announces `ready`, then reports
 	 * `resize` whenever the document height changes by more than a noise
-	 * threshold, so the parent frame can grow the panel to fit.
+	 * threshold, so the parent frame can grow the panel to fit. The caller
+	 * prints it through wp_print_inline_script_tag().
 	 *
-	 * @return string
+	 * @return string JavaScript.
 	 */
-	public function handshake_script() {
-		$js = '(function(){'
+	public function handshake_js() {
+		return '(function(){'
 			. 'if(window.parent===window){return;}'
 			. 'var post=function(m){try{window.parent.postMessage(m,window.location.origin);}catch(e){}};'
 			. "post({source:'idea89-checkout',type:'ready'});"
@@ -65,8 +80,6 @@ class Idea89_Checkout_Bridge {
 			. 'if(window.ResizeObserver){new ResizeObserver(send).observe(document.body);}'
 			. 'else{setInterval(send,600);}'
 			. '})();';
-
-		return '<script>' . $js . '</script>';
 	}
 
 	/**
@@ -80,12 +93,12 @@ class Idea89_Checkout_Bridge {
 	 * responsible for confirming $order is a real, loaded order before
 	 * calling this — see that method's docblock for why session state alone
 	 * can never be trusted for that on WooCommerce, same trap as Magento 2's
-	 * getLastRealOrder().
+	 * getLastRealOrder() — and prints it through wp_print_inline_script_tag().
 	 *
 	 * @param WC_Order $order The completed order.
-	 * @return string
+	 * @return string JavaScript.
 	 */
-	public function success_script( $order ) {
+	public function success_js( $order ) {
 		$payload = wp_json_encode(
 			array(
 				'source'   => 'idea89-checkout',
@@ -93,38 +106,51 @@ class Idea89_Checkout_Bridge {
 				'orderId'  => (string) $order->get_order_number(),
 				'total'    => (string) $order->get_total(),
 				'currency' => (string) $order->get_currency(),
-			)
+			),
+			self::JSON_FLAGS
 		);
 
-		$js = '(function(){'
+		return '(function(){'
 			. 'if(window.parent===window){return;}'
 			. 'try{window.parent.postMessage(' . $payload . ',window.location.origin);}catch(e){}'
 			. '})();';
-
-		return '<script>' . $js . '</script>';
 	}
 
 	/**
-	 * A minimal same-origin document whose only job is to tell the framing
-	 * widget why the checkout will not render, so it falls back immediately
-	 * instead of waiting out the widget's 6-second handshake timeout. Same
-	 * envelope and shape as Magento 2's Controller\Checkout\Mini::bridgeError()
-	 * and the Magento 1 equivalent.
+	 * Prints a minimal same-origin document whose only job is to tell the
+	 * framing widget why the checkout will not render, so it falls back
+	 * immediately instead of waiting out the widget's 6-second handshake
+	 * timeout. Same envelope and shape as Magento 2's
+	 * Controller\Checkout\Mini::bridgeError() and the Magento 1 equivalent.
+	 *
+	 * The markup is a literal; the only data on the page is the envelope,
+	 * and core prints that as the script element.
 	 *
 	 * @param string $code Machine-readable reason, e.g. 'empty_cart'.
-	 * @return string
+	 * @return void
 	 */
-	public function error_page( $code ) {
+	public function print_error_page( $code ) {
+		echo '<!doctype html><meta charset="utf-8"><title></title>';
+		wp_print_inline_script_tag( $this->error_js( $code ) );
+	}
+
+	/**
+	 * The error envelope JavaScript on its own.
+	 *
+	 * @param string $code Machine-readable reason, e.g. 'empty_cart'.
+	 * @return string JavaScript.
+	 */
+	public function error_js( $code ) {
 		$payload = wp_json_encode(
 			array(
 				'source' => 'idea89-checkout',
 				'type'   => 'error',
 				'code'   => (string) $code,
-			)
+			),
+			self::JSON_FLAGS
 		);
 
-		return '<!doctype html><meta charset="utf-8"><title></title>'
-			. '<script>if(window.parent!==window){'
-			. 'window.parent.postMessage(' . $payload . ',window.location.origin);}</script>';
+		return 'if(window.parent!==window){'
+			. 'window.parent.postMessage(' . $payload . ',window.location.origin);}';
 	}
 }

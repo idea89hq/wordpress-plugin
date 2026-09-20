@@ -87,6 +87,13 @@ class MiniCheckoutTest extends TestCase {
 		Monkey\setUp();
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 		Functions\when( '__' )->returnArg( 1 );
+		// Core's inline-script printer, as it prints for an HTML5 theme:
+		// <script>DATA</script> plus a newline, attributes sanitized by core.
+		Functions\when( 'wp_print_inline_script_tag' )->alias(
+			function ( $data, $attributes = array() ) {
+				echo '<script>' . $data . '</script>' . "\n";
+			}
+		);
 	}
 
 	protected function tearDown(): void {
@@ -103,6 +110,31 @@ class MiniCheckoutTest extends TestCase {
 				return array_key_exists( $name, $options ) ? $options[ $name ] : $default;
 			}
 		);
+	}
+
+	/**
+	 * render() prints; capture it the way a browser would receive it.
+	 *
+	 * @param Idea89_Mini_Checkout $mini
+	 * @return string
+	 */
+	private function rendered( Idea89_Mini_Checkout $mini ) {
+		ob_start();
+		$mini->render();
+		return ob_get_clean();
+	}
+
+	/**
+	 * The error page, captured.
+	 *
+	 * @param Idea89_Checkout_Bridge $bridge
+	 * @param string                 $code
+	 * @return string
+	 */
+	private function error_page( Idea89_Checkout_Bridge $bridge, $code ) {
+		ob_start();
+		$bridge->print_error_page( $code );
+		return ob_get_clean();
 	}
 
 	private function embedded_mini_checkout() {
@@ -149,7 +181,7 @@ class MiniCheckoutTest extends TestCase {
 		);
 		$mini = new Idea89_Mini_Checkout( new Idea89_Config(), new Idea89_Checkout_Config(), new Idea89_Checkout_Bridge() );
 
-		$html = $mini->render();
+		$html = $this->rendered( $mini );
 
 		$this->assertStringContainsString( '"source":"idea89-checkout"', $html );
 		$this->assertStringContainsString( '"type":"error"', $html );
@@ -165,14 +197,14 @@ class MiniCheckoutTest extends TestCase {
 		);
 		$mini = new Idea89_Mini_Checkout( new Idea89_Config(), new Idea89_Checkout_Config(), new Idea89_Checkout_Bridge() );
 
-		$this->assertStringContainsString( '"code":"not_available"', $mini->render() );
+		$this->assertStringContainsString( '"code":"not_available"', $this->rendered( $mini ) );
 	}
 
 	public function test_renders_the_bridge_error_on_an_empty_cart() {
 		Functions\when( 'WC' )->justReturn( new Fake_WC( new Fake_WC_Cart( true ) ) );
 		$mini = $this->embedded_mini_checkout();
 
-		$html = $mini->render();
+		$html = $this->rendered( $mini );
 
 		$this->assertStringContainsString( '"code":"empty_cart"', $html );
 	}
@@ -184,7 +216,7 @@ class MiniCheckoutTest extends TestCase {
 		Functions\when( 'WC' )->justReturn( new Fake_WC( null ) );
 		$mini = $this->embedded_mini_checkout();
 
-		$this->assertStringContainsString( '"code":"empty_cart"', $mini->render() );
+		$this->assertStringContainsString( '"code":"empty_cart"', $this->rendered( $mini ) );
 	}
 
 	public function test_render_falls_back_to_unsupported_checkout_when_the_probe_is_unknown() {
@@ -195,7 +227,7 @@ class MiniCheckoutTest extends TestCase {
 		Functions\when( 'wc_get_page_id' )->justReturn( 0 );
 		$mini = $this->embedded_mini_checkout();
 
-		$html = $mini->render();
+		$html = $this->rendered( $mini );
 
 		$this->assertStringContainsString( '"code":"unsupported_checkout"', $html );
 	}
@@ -221,7 +253,7 @@ class MiniCheckoutTest extends TestCase {
 		Functions\when( 'do_shortcode' )->justReturn( '<form>checkout fields</form>' );
 
 		$mini = $this->embedded_mini_checkout();
-		$html = $mini->render();
+		$html = $this->rendered( $mini );
 
 		$this->assertStringContainsString( 'idea89-mini-checkout', $html );
 		$this->assertStringContainsString( '<!-- head-marker -->', $html );
@@ -244,9 +276,71 @@ class MiniCheckoutTest extends TestCase {
 		Functions\when( 'do_blocks' )->justReturn( '<div class="wc-block-checkout">block checkout</div>' );
 
 		$mini = $this->embedded_mini_checkout();
-		$html = $mini->render();
+		$html = $this->rendered( $mini );
 
 		$this->assertStringContainsString( 'block checkout', $html );
+	}
+
+	/**
+	 * The stripped page is printed, never buffered into a string and echoed:
+	 * wp_head() and wp_footer() print themselves, and every <script> element
+	 * — the bridge handshake included — is printed by core's
+	 * wp_print_inline_script_tag(), so nothing this class echoes directly is
+	 * a script tag.
+	 */
+	public function test_document_handshake_is_printed_through_the_core_inline_script_api() {
+		Functions\when( 'WC' )->justReturn( new Fake_WC( new Fake_WC_Cart( false ) ) );
+		Functions\when( 'wp_head' )->justReturn( null );
+		Functions\when( 'wp_footer' )->justReturn( null );
+		Functions\when( 'wc_get_page_id' )->justReturn( 42 );
+		Functions\when( 'get_post' )->justReturn( new WP_Post( '[woocommerce_checkout]' ) );
+		Functions\when( 'has_block' )->justReturn( false );
+		Functions\when( 'has_shortcode' )->justReturn( true );
+		Functions\when( 'do_shortcode' )->justReturn( '<form>checkout fields</form>' );
+
+		$printed = null;
+		Functions\when( 'wp_print_inline_script_tag' )->alias(
+			function ( $data, $attributes = array() ) use ( &$printed ) {
+				$printed = $data;
+			}
+		);
+
+		$mini = $this->embedded_mini_checkout();
+
+		ob_start();
+		$mini->render();
+		$echoed = ob_get_clean();
+
+		$this->assertNotNull( $printed, 'The handshake must reach core\'s printer.' );
+		$this->assertStringContainsString( "type:'ready'", $printed );
+		$this->assertStringNotContainsString( '<script', $echoed, 'No script tag is echoed by hand; core prints it.' );
+		$this->assertStringContainsString( '<form>checkout fields</form>', $echoed );
+	}
+
+	public function test_error_page_is_printed_through_the_core_inline_script_api() {
+		$this->with_options(
+			array(
+				'idea89_enabled'       => true,
+				'idea89_checkout_mode' => 'express',
+			)
+		);
+		$mini = new Idea89_Mini_Checkout( new Idea89_Config(), new Idea89_Checkout_Config(), new Idea89_Checkout_Bridge() );
+
+		$printed = null;
+		Functions\when( 'wp_print_inline_script_tag' )->alias(
+			function ( $data, $attributes = array() ) use ( &$printed ) {
+				$printed = $data;
+			}
+		);
+
+		ob_start();
+		$mini->render();
+		$echoed = ob_get_clean();
+
+		$this->assertNotNull( $printed, 'The error envelope must reach core\'s printer.' );
+		$this->assertStringContainsString( '"code":"not_available"', $printed );
+		$this->assertStringNotContainsString( '<script', $echoed, 'No script tag is echoed by hand; core prints it.' );
+		$this->assertStringStartsWith( '<!doctype html>', $echoed );
 	}
 
 	/* ---------------- Task 6.3: the thank-you success hook ---------------- */
@@ -301,16 +395,16 @@ class MiniCheckoutTest extends TestCase {
 
 	public function test_handshake_script_guards_first_and_announces_ready() {
 		$bridge = new Idea89_Checkout_Bridge();
-		$script = $bridge->handshake_script();
+		$script = $bridge->handshake_js();
 
-		$this->assertStringStartsWith( '<script>(function(){if(window.parent===window){return;}', $script );
+		$this->assertStringStartsWith( '(function(){if(window.parent===window){return;}', $script );
 		$this->assertStringContainsString( "type:'ready'", $script );
 		$this->assertStringContainsString( "type:'resize'", $script );
 	}
 
 	public function test_success_script_carries_order_id_total_and_currency() {
 		$bridge = new Idea89_Checkout_Bridge();
-		$script = $bridge->success_script( new Fake_WC_Order( array( 'order_number' => '1042', 'total' => '59.98', 'currency' => 'GBP' ) ) );
+		$script = $bridge->success_js( new Fake_WC_Order( array( 'order_number' => '1042', 'total' => '59.98', 'currency' => 'GBP' ) ) );
 
 		$this->assertStringContainsString( '"type":"success"', $script );
 		$this->assertStringContainsString( '"orderId":"1042"', $script );
@@ -320,7 +414,7 @@ class MiniCheckoutTest extends TestCase {
 
 	public function test_error_page_carries_the_code() {
 		$bridge = new Idea89_Checkout_Bridge();
-		$html   = $bridge->error_page( 'empty_cart' );
+		$html   = $this->error_page( $bridge, 'empty_cart' );
 
 		$this->assertStringContainsString( '"source":"idea89-checkout"', $html );
 		$this->assertStringContainsString( '"type":"error"', $html );
@@ -336,14 +430,71 @@ class MiniCheckoutTest extends TestCase {
 
 		foreach (
 			array(
-				$bridge->handshake_script(),
-				$bridge->success_script( $order ),
-				$bridge->error_page( 'empty_cart' ),
+				$bridge->handshake_js(),
+				$bridge->success_js( $order ),
+				$this->error_page( $bridge, 'empty_cart' ),
 			) as $script
 		) {
 			$this->assertStringNotContainsString( "'*'", $script );
 			$this->assertStringContainsString( 'window.location.origin', $script );
 		}
+	}
+
+	/**
+	 * The bridge builds JavaScript; the <script> element around it is
+	 * printed by core (wp_print_inline_script_tag), never hand-written.
+	 */
+	public function test_bridge_scripts_are_wrapped_by_core_not_by_hand() {
+		$bridge = new Idea89_Checkout_Bridge();
+		$order  = new Fake_WC_Order();
+
+		$this->assertStringStartsWith( '(function(){if(window.parent===window){return;}', $bridge->handshake_js() );
+		$this->assertStringStartsWith( '(function(){if(window.parent===window){return;}', $bridge->success_js( $order ) );
+		$this->assertStringStartsWith( 'if(window.parent!==window){', $bridge->error_js( 'empty_cart' ) );
+
+		foreach ( array( $bridge->handshake_js(), $bridge->success_js( $order ), $bridge->error_js( 'empty_cart' ) ) as $js ) {
+			$this->assertStringNotContainsString( '<script', $js );
+		}
+	}
+
+	public function test_thank_you_hook_prints_through_the_core_inline_script_api() {
+		Functions\when( 'wc_get_order' )->justReturn( new Fake_WC_Order( array( 'order_number' => '1042' ) ) );
+		$mini = $this->embedded_mini_checkout();
+
+		$printed = null;
+		Functions\when( 'wp_print_inline_script_tag' )->alias(
+			function ( $data, $attributes = array() ) use ( &$printed ) {
+				$printed = $data;
+			}
+		);
+
+		ob_start();
+		$mini->render_success_bridge( 1042 );
+		$echoed = ob_get_clean();
+
+		$this->assertSame( '', $echoed, 'Nothing is echoed directly; core prints the tag.' );
+		$this->assertStringContainsString( '"orderId":"1042"', $printed );
+	}
+
+	/**
+	 * The order number is filterable by other plugins (sequential-number
+	 * plugins rewrite it), so it is treated as untrusted inside the script:
+	 * a "</script>" in it must not be able to close the element.
+	 */
+	public function test_success_payload_cannot_close_the_script_element() {
+		$bridge = new Idea89_Checkout_Bridge();
+		$js     = $bridge->success_js( new Fake_WC_Order( array( 'order_number' => '1042</script><script>alert(1)</script>' ) ) );
+
+		$this->assertStringNotContainsString( '</script>', $js );
+		$this->assertStringContainsString( '\\u003C', $js );
+	}
+
+	public function test_error_code_cannot_close_the_script_element() {
+		$bridge = new Idea89_Checkout_Bridge();
+		$js     = $bridge->error_js( 'x</script>' );
+
+		$this->assertStringNotContainsString( '</script>', $js );
+		$this->assertStringContainsString( '\\u003C', $js );
 	}
 
 	/* ---------------- Task 6.4: detect_checkout_type() ---------------- */

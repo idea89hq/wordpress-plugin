@@ -119,7 +119,7 @@ class Idea89_Locator_Page {
 
 		wp_add_inline_script(
 			'idea89-locator',
-			$this->analytics_script( $api_base, (string) $this->config->get_api_key() ),
+			self::analytics_script( $api_base, (string) $this->config->get_api_key() ),
 			'after'
 		);
 	}
@@ -153,14 +153,21 @@ class Idea89_Locator_Page {
 	 * @param string $api_key  API key.
 	 * @return string
 	 */
-	private function analytics_script( $api_base, $api_key ) {
+	public static function analytics_script( $api_base, $api_key ) {
+		// Both values are merchant settings landing inside an inline script;
+		// JSON_HEX_TAG turns any "</script>" in them into \u003C/script\u003E,
+		// which JS reads back as the original text but the HTML parser does
+		// not see as a closing tag. The other three flags close the same
+		// door for & ' and ".
+		$flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+
 		return sprintf(
 			'document.addEventListener("locator:analytics",function(e){var d=e.detail||{};' .
 			'fetch(%s+"/widget/v1/analytics",{method:"POST",headers:{"Content-Type":"application/json",' .
 			'"X-IDEA89-Key":%s},body:JSON.stringify({name:d.name,properties:d.properties,' .
 			'entry_point:"store-finder"}),keepalive:true}).catch(function(){});});',
-			wp_json_encode( $api_base ),
-			wp_json_encode( $api_key )
+			wp_json_encode( $api_base, $flags ),
+			wp_json_encode( $api_key, $flags )
 		);
 	}
 
@@ -273,9 +280,9 @@ class Idea89_Locator_Page {
 				continue;
 			}
 
-			// wp_json_encode output, printed as the contents of a JSON-LD
-			// script tag. esc_html would corrupt it into invalid JSON.
-			echo '<script type="application/ld+json">' . $json . '</script>' . "\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			// store_json_ld() already hex-encodes < > & ' " so the JSON can
+			// never close this element early; core builds and prints the tag.
+			wp_print_inline_script_tag( $json, array( 'type' => 'application/ld+json' ) );
 		}
 	}
 
@@ -404,7 +411,10 @@ class Idea89_Locator_Page {
 			);
 		}
 
-		$json = wp_json_encode( $data );
+		// Hex-encode < > & ' " : this JSON is printed inside a <script>
+		// element, and a location name containing "</script>" must not be
+		// able to close it. \u003C is still valid JSON-LD to every consumer.
+		$json = wp_json_encode( $data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT );
 
 		return false === $json ? '' : $json;
 	}

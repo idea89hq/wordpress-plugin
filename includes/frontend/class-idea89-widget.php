@@ -1,10 +1,12 @@
 <?php
 /**
- * Prints the widget loader in the storefront footer.
+ * Enqueues the widget loader in the storefront footer.
  *
  * The inline config block MUST be emitted before the loader script. The widget
  * reads window.__IDEA89_WC when it boots, and without it the WooCommerce
- * add-to-cart branch falls back to the Magento path and fails.
+ * add-to-cart branch falls back to the Magento path and fails. That ordering
+ * is guaranteed by attaching the config with wp_add_inline_script( ..., 'before' )
+ * to the loader's own handle, rather than by printing two tags in sequence.
  *
  * @package Idea89
  */
@@ -15,6 +17,12 @@ defined( 'ABSPATH' ) || exit;
  * Storefront widget embed.
  */
 class Idea89_Widget {
+
+	/**
+	 * Script handle for the loader. Core derives the tag's id from it
+	 * ("{handle}-js"), which is how loader_attributes() recognises our tag.
+	 */
+	const HANDLE = 'idea89-widget';
 
 	/**
 	 * Configuration reader.
@@ -33,12 +41,13 @@ class Idea89_Widget {
 	}
 
 	/**
-	 * Hooks the footer renderer.
+	 * Hooks the enqueue and the attribute filter for the loader tag.
 	 *
 	 * @return void
 	 */
 	public function register() {
-		add_action( 'wp_footer', array( $this, 'render' ), 20 );
+		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue' ) );
+		add_filter( 'wp_script_attributes', array( $this, 'loader_attributes' ) );
 	}
 
 	/**
@@ -65,20 +74,66 @@ class Idea89_Widget {
 	}
 
 	/**
-	 * Prints the config block and the loader script.
+	 * Registers the loader script with the config block attached before it.
 	 *
 	 * @return void
 	 */
-	public function render() {
+	public function enqueue() {
 		if ( ! $this->should_render() ) {
 			return;
 		}
 
-		$api_key     = $this->config->get_api_key();
-		$loader_url  = self::build_loader_url( $this->config->get_api_url(), $api_key );
-		$position    = $this->config->get_widget_position();
-		$brand_color = $this->config->get_brand_color();
+		$loader_url = self::build_loader_url( $this->config->get_api_url(), $this->config->get_api_key() );
 
+		// Version is null on purpose: the API versions the loader itself and
+		// appending ?ver= would fight its own cache headers. Async matches
+		// the tag the loader has always shipped with; 'before' is the one
+		// inline position that keeps an async script async.
+		wp_register_script(
+			self::HANDLE,
+			$loader_url,
+			array(),
+			null, // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion -- the API versions the loader itself.
+			array(
+				'in_footer' => true,
+				'strategy'  => 'async',
+			)
+		);
+		wp_add_inline_script( self::HANDLE, $this->config_js(), 'before' );
+		wp_enqueue_script( self::HANDLE );
+	}
+
+	/**
+	 * Adds the loader's data-* attributes to its own <script> tag, and no
+	 * other. Core escapes every value when it prints the tag.
+	 *
+	 * @param array<string,mixed> $attributes Tag attributes core is about to print.
+	 * @return array<string,mixed>
+	 */
+	public function loader_attributes( $attributes ) {
+		if ( ! isset( $attributes['id'] ) || self::HANDLE . '-js' !== $attributes['id'] ) {
+			return $attributes;
+		}
+
+		$attributes['data-key']      = $this->config->get_api_key();
+		$attributes['data-position'] = $this->config->get_widget_position();
+
+		$brand_color = $this->config->get_brand_color();
+		if ( '' !== $brand_color ) {
+			$attributes['data-color'] = $brand_color;
+		}
+
+		return $attributes;
+	}
+
+	/**
+	 * The JavaScript that publishes the storefront globals the widget reads
+	 * on boot. Returned rather than printed so wp_add_inline_script() can
+	 * place it, and so tests can read it without output buffering.
+	 *
+	 * @return string
+	 */
+	public function config_js() {
 		$store_api = function_exists( 'get_rest_url' ) ? get_rest_url( null, 'wc/store/v1' ) : '';
 		$nonce     = wp_create_nonce( 'wc_store_api' );
 		$cart_url  = function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : '';
@@ -118,27 +173,32 @@ class Idea89_Widget {
 			// platform-neutral ckCfg.checkoutBar boolean either way.
 			'checkoutBar'      => $checkout_config->is_checkout_bar_enabled(),
 		);
-		?>
-<script type="text/javascript">
-window.__IDEA89_PLATFORM = 'woocommerce';
-window.__IDEA89_WC = {
-	storeApi: '<?php echo esc_js( $store_api ); ?>',
-	nonce: '<?php echo esc_js( $nonce ); ?>',
-	cartUrl: '<?php echo esc_js( $cart_url ); ?>'
-};
-window.__IDEA89_CHECKOUT = <?php echo wp_json_encode( $checkout_cfg ); ?>;
-</script>
-<script
-	src="<?php echo esc_url( $loader_url ); ?>"
-	data-key="<?php echo esc_attr( $api_key ); ?>"
-	data-position="<?php echo esc_attr( $position ); ?>"
-		<?php
-		if ( '' !== $brand_color ) :
-			?>
-			data-color="<?php echo esc_attr( $brand_color ); ?>"<?php endif; ?>
-	async
-></script>
-		<?php
+
+		// Both objects land inside a <script> element, so both go through
+		// wp_json_encode() with the JSON_HEX_* flags: < > & ' " become
+		// \u003C etc., which a JS object literal reads back as the original
+		// characters, so no value can carry a "</script>" that terminates
+		// the inline block. Not esc_js(): that is for attribute context
+		// (onclick="...") and turns & < > into HTML entities, which a script
+		// element does not decode, so a URL with a query string would reach
+		// the widget corrupted.
+		$flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+
+		// __IDEA89_WC keeps the exact keys the shipped widget's
+		// _addToCartWoo and _cartSummaryWoo read: storeApi, nonce, cartUrl.
+		$wc_json       = wp_json_encode(
+			array(
+				'storeApi' => $store_api,
+				'nonce'    => $nonce,
+				'cartUrl'  => $cart_url,
+			),
+			$flags
+		);
+		$checkout_json = wp_json_encode( $checkout_cfg, $flags );
+
+		return "window.__IDEA89_PLATFORM = 'woocommerce';\n"
+			. 'window.__IDEA89_WC = ' . $wc_json . ";\n"
+			. 'window.__IDEA89_CHECKOUT = ' . $checkout_json . ';';
 	}
 
 	/**

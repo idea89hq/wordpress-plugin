@@ -2,10 +2,10 @@
 Contributors: idea89hq
 Tags: ai, chatbot, woocommerce, product recommendations, customer support
 Requires at least: 6.4
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.2.0
+Stable tag: 1.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -137,6 +137,19 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 
 == Changelog ==
 
+= 1.2.3 =
+* **Storefront globals are JSON-encoded.** The __IDEA89_WC block (Store API URL, nonce, basket URL) that the assistant reads on boot is now written with wp_json_encode and the same hex-escaping as every other inline value, in place of esc_js, which is meant for attribute context. Same keys, same values; nothing changes for shoppers.
+* **In-chat checkout page is printed, not buffered.** The stripped checkout page is now written the way a page template is: wp_head and wp_footer print themselves and every script element is printed by WordPress's own inline-script function, instead of the whole page being assembled into one string and echoed. Same page, same headers, same bridge messages.
+
+= 1.2.2 =
+* **Widget loader is now enqueued.** The storefront loader goes through wp_register_script / wp_enqueue_script with its configuration attached via wp_add_inline_script, instead of a script tag printed in the footer. Same script, same globals, same async behaviour; other plugins and themes can now see and filter it like any other enqueued script.
+* **Hardened inline JSON.** Every value the plugin writes into an inline script (checkout configuration, store finder analytics settings, store JSON-LD, checkout bridge messages) is now JSON-encoded with the characters <, >, &, ' and " hex-escaped, so no configured or merchant-entered value can close the script element early. Structured data and scripts are printed through WordPress's own inline-script functions.
+
+= 1.2.1 =
+* **Assistant name now sets the name shoppers see.** The Assistant name field under Appearance used to save a value nothing read; the name above the conversation came from your IDEA89 account. It is now that same name, so setting it here sets what shoppers see and how the assistant refers to itself when asked. Stored in your IDEA89 account rather than in WordPress, so it is the same in both places.
+* **Checkout display, shared with your IDEA89 dashboard.** New field under IDEA89 > Checkout experience. Full window (the default, and how the assistant has behaved so far) gives checkout the whole screen; In the chat keeps checkout inside the assistant panel alongside the conversation. Changing it in WordPress or in the dashboard changes it in both.
+* **Personalization status is spelled out.** Personalization needs two switches on, one in WordPress and one in your IDEA89 dashboard. The settings screen now says which half is on and which is off, so a store where only one is on is no longer told nothing.
+
 = 1.2.0 =
 * **Checkout experience.** New setting under IDEA89 > Checkout experience, matching the Magento 2 module. Express handoff is the default: after adding to basket, the assistant shows a basket summary card in chat with one button straight to your checkout. Checkout in chat opens your real WooCommerce checkout inside the assistant panel, with your site's header, footer and navigation stripped away so it fits the panel cleanly. Your payment methods, your shipping rules, your extensions all run exactly as they do on your normal checkout page; IDEA89 never sees a card number. Works whether your checkout page uses the classic checkout shortcode or the WooCommerce Checkout block; a settings screen status line beside the mode select tells you which one your store uses. If your checkout page uses neither, the assistant sends shoppers to it directly instead of showing it in the chat. Native checkout (beta) is also a real, working rung: the assistant collects delivery details in the conversation and places the order itself, on payment methods you choose from an allowlist that is empty by default, so a freshly switched-on store places no orders at all until you explicitly select one. Offline methods (cash on delivery, bank transfer, cheque) are recommended. Existing stores keep today's behaviour unless this setting is changed.
 * **Agentic Commerce Protocol product feed.** New setting under IDEA89 > Agentic Commerce, off by default. Publishes your catalogue (names, descriptions, prices, stock and page links) at a public web address in the Agentic Commerce Protocol shape, so assistants such as ChatGPT can find and recommend your products. Works alongside any checkout experience setting. Does not give anyone access to your orders, customers or payment details, and nothing is published until you turn it on.
@@ -168,8 +181,17 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 
 == Upgrade Notice ==
 
+= 1.2.3 =
+Security hardening only: the storefront globals are JSON-encoded and the in-chat checkout page is printed through WordPress's own functions. No settings or behaviour change.
+
+= 1.2.2 =
+Security hardening: the widget loader is enqueued through WordPress and every value written into an inline script is hex-escaped. No settings or behaviour change.
+
+= 1.2.1 =
+The Assistant name field now sets the name shoppers see, a new Checkout display setting is shared with your IDEA89 dashboard (default: Full window, unchanged), and the settings screen shows whether both halves of personalization are on. Nothing changes on upgrade unless you edit one of these.
+
 = 1.2.0 =
-Adds the Assistant checkout mode setting (default: Express handoff), an Agentic Commerce product feed setting (default: off), and a pinned checkout bar above the assistant's message box (default: on, shown only when the basket has items). No change to your checkout or your catalogue's visibility, beyond the new bar, unless you switch one of the other settings on.
+Adds the Assistant checkout mode setting (default: Express handoff), an Agentic Commerce product feed setting (default: off), and a pinned checkout bar above the message box (default: on, only when the basket has items). Only the bar changes on upgrade unless you switch the others on.
 
 = 1.1.1 =
 Recognises a subfolder install as its own account and names the connected site when you test your key. No change if your shop is at the domain root.

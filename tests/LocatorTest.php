@@ -4,6 +4,7 @@ use Brain\Monkey;
 use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
 
+require_once IDEA89_PLUGIN_DIR . 'includes/class-idea89-config.php';
 require_once IDEA89_PLUGIN_DIR . 'includes/locator/class-idea89-locator-config.php';
 require_once IDEA89_PLUGIN_DIR . 'includes/locator/class-idea89-remote-config.php';
 require_once IDEA89_PLUGIN_DIR . 'includes/locator/class-idea89-locator-page.php';
@@ -14,8 +15,8 @@ class LocatorTest extends TestCase {
 		parent::setUp();
 		Monkey\setUp();
 		Functions\when( 'wp_json_encode' )->alias(
-			function ( $data ) {
-				return json_encode( $data );
+			function ( $data, $flags = 0 ) {
+				return json_encode( $data, $flags );
 			}
 		);
 	}
@@ -184,5 +185,68 @@ class LocatorTest extends TestCase {
 	/** A nameless record would emit meaningless structured data. */
 	public function test_json_ld_is_empty_without_a_name() {
 		$this->assertSame( '', Idea89_Locator_Page::store_json_ld( array( 'city' => 'Leeds' ) ) );
+	}
+
+	/**
+	 * A location name (merchant-entered, fetched from the API) containing
+	 * "</script>" must not be able to close the JSON-LD element: every
+	 * < > & ' " is hex-encoded, which is still valid JSON and reads back
+	 * as the original text.
+	 */
+	public function test_json_ld_cannot_close_its_own_script_element() {
+		$json = Idea89_Locator_Page::store_json_ld( array( 'name' => 'Leeds </script><script>alert(1)</script>' ) );
+
+		$this->assertStringNotContainsString( '</script>', $json );
+		$this->assertStringNotContainsString( '<', $json );
+		$this->assertStringContainsString( '\\u003C', $json );
+		$this->assertSame( 'Leeds </script><script>alert(1)</script>', json_decode( $json, true )['name'] );
+	}
+
+	/**
+	 * Same for the analytics hook: the API base URL and key are merchant
+	 * settings, and neither may terminate the inline script they land in.
+	 */
+	public function test_analytics_script_cannot_be_terminated_by_a_configured_value() {
+		$js = Idea89_Locator_Page::analytics_script( 'https://api.example.test', 'k</script><script>alert(1)</script>' );
+
+		$this->assertStringNotContainsString( '</script>', $js );
+		$this->assertStringContainsString( '\\u003C', $js );
+		// Slashes were already escaped before this change; the URL still works.
+		$this->assertStringContainsString( 'fetch("https:\\/\\/api.example.test"+"/widget/v1/analytics"', $js );
+	}
+
+	/**
+	 * head() hands the JSON-LD to wp_print_inline_script_tag() with the
+	 * ld+json type instead of echoing a hand-built <script> tag.
+	 */
+	public function test_head_prints_json_ld_through_the_inline_script_tag_api() {
+		$page = new Idea89_Locator_Page(
+			$this->createMock( Idea89_Locator_Config::class ),
+			$this->createMock( Idea89_Remote_Config::class ),
+			$this->createMock( Idea89_Config::class )
+		);
+
+		$flag = new ReflectionProperty( Idea89_Locator_Page::class, 'is_locator' );
+		$flag->setAccessible( true );
+		$flag->setValue( $page, true );
+
+		Functions\when( 'get_transient' )->justReturn( array( array( 'name' => 'Leeds' ), array( 'city' => 'nameless' ) ) );
+		Functions\when( 'esc_attr' )->returnArg( 1 );
+
+		$printed = array();
+		Functions\when( 'wp_print_inline_script_tag' )->alias(
+			function ( $data, $attributes = array() ) use ( &$printed ) {
+				$printed[] = array( $data, $attributes );
+			}
+		);
+
+		ob_start();
+		$page->head();
+		$html = ob_get_clean();
+
+		$this->assertCount( 1, $printed, 'One JSON-LD block per named location; the nameless one is skipped.' );
+		$this->assertSame( array( 'type' => 'application/ld+json' ), $printed[0][1] );
+		$this->assertSame( 'Leeds', json_decode( $printed[0][0], true )['name'] );
+		$this->assertStringNotContainsString( '<script', $html, 'No hand-built script tag is echoed.' );
 	}
 }

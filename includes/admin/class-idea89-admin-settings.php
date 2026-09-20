@@ -1431,10 +1431,15 @@ class Idea89_Admin_Settings {
 							<span class="idea89-brand__sep">&middot;</span>
 						<?php endif; ?>
 						<a href="<?php echo esc_url( $link['url'] ); ?>"
-							<?php echo $link['external'] ? 'target="_blank" rel="noopener noreferrer"' : ''; ?>>
+							<?php if ( $link['external'] ) : ?>
+								target="_blank" rel="noopener noreferrer"
+							<?php endif; ?>
+						>
 							<?php
 							echo esc_html( $link['label'] );
-							echo $link['external'] ? ' &#8599;' : '';
+							if ( $link['external'] ) {
+								echo ' &#8599;';
+							}
 							?>
 						</a>
 					<?php endforeach; ?>

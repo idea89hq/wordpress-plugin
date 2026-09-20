@@ -108,9 +108,9 @@ class Idea89_Mini_Checkout {
 	 * WooCommerce and WordPress requests are completely untouched by this
 	 * class being registered.
 	 *
-	 * Ends the request itself (echoes then exits) once it decides to render,
+	 * Ends the request itself (prints then exits) once it decides to render,
 	 * exactly like Idea89_Order_Endpoints::send(). That exit is kept OUT of
-	 * render() below so render() stays callable, and its output inspectable,
+	 * render() below so render() stays callable, and its output capturable,
 	 * from a test without terminating the test process.
 	 *
 	 * @return void
@@ -120,11 +120,9 @@ class Idea89_Mini_Checkout {
 			return;
 		}
 
-		$body = $this->render();
-
-		// Kept out of render() itself, and sent only once the full body is
-		// already built: this is the one raw header() call in this class,
-		// and PHPUnit's function-mocking layer (Patchwork) cannot safely
+		// Sent before the first byte of output, and kept out of render()
+		// itself: this is the one raw header() call in this class, and
+		// PHPUnit's function-mocking layer (Patchwork) cannot safely
 		// redefine PHP's native header() without extra project config, so
 		// render() — the method every test below calls directly — must never
 		// reach it. Applies to every outcome alike, error page or real
@@ -134,17 +132,23 @@ class Idea89_Mini_Checkout {
 		nocache_headers();
 		header( 'X-Frame-Options: SAMEORIGIN' );
 
-		echo $body; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- render() returns a complete, already-escaped document.
+		$this->render();
 		exit;
 	}
 
 	/**
-	 * Builds the full response body: either the bridge-error page or the
+	 * Prints the full response: either the bridge-error page or the
 	 * complete stripped-checkout document. Never exits, never redirects —
-	 * every failure mode renders the same-origin bridge-error page so the
+	 * every failure mode prints the same-origin bridge-error page so the
 	 * framing widget can read a machine-readable reason and fall back
 	 * immediately, per the message contract shared with Magento 2 and
 	 * Magento 1.
+	 *
+	 * Printed, not buffered: the document is the theme-free equivalent of
+	 * a page template, so it is written the way a template is — literal
+	 * markup, wp_head() and wp_footer() printing themselves, core printing
+	 * every script element — rather than assembled into one string that is
+	 * echoed at the end.
 	 *
 	 * Guard order is deliberate and matters for which code a shopper sees:
 	 * feature/mode first (an unused route should not leak checkout-shape
@@ -153,24 +157,27 @@ class Idea89_Mini_Checkout {
 	 * since it is the most expensive check and the only one that needs a
 	 * real cart to matter.
 	 *
-	 * @return string
+	 * @return void
 	 */
 	public function render() {
 		if ( ! $this->config->is_enabled() || ! $this->checkout_config->is_embedded() ) {
-			return $this->bridge->error_page( 'not_available' );
+			$this->bridge->print_error_page( 'not_available' );
+			return;
 		}
 
 		if ( ! $this->has_a_usable_cart() ) {
-			return $this->bridge->error_page( 'empty_cart' );
+			$this->bridge->print_error_page( 'empty_cart' );
+			return;
 		}
 
 		$type = self::detect_checkout_type();
 
 		if ( 'unknown' === $type ) {
-			return $this->bridge->error_page( 'unsupported_checkout' );
+			$this->bridge->print_error_page( 'unsupported_checkout' );
+			return;
 		}
 
-		return $this->render_document( $type );
+		$this->print_document( $type );
 	}
 
 	/**
@@ -193,7 +200,7 @@ class Idea89_Mini_Checkout {
 	}
 
 	/**
-	 * Assembles the stripped document: wp_head() and wp_footer() are both
+	 * Prints the stripped document: wp_head() and wp_footer() are both
 	 * REQUIRED, or WooCommerce's own scripts and styles never enqueue and
 	 * the checkout renders unstyled and dead — every theme and WooCommerce
 	 * itself expects both to run on every front-end request.
@@ -203,46 +210,51 @@ class Idea89_Mini_Checkout {
 	 * page rendered rather than, say, a theme 404.
 	 *
 	 * @param string $type 'block' or 'shortcode', from detect_checkout_type().
-	 * @return string
+	 * @return void
 	 */
-	private function render_document( $type ) {
-		ob_start();
+	private function print_document( $type ) {
+		echo '<!doctype html><html><head>';
 		wp_head();
-		$head = ob_get_clean();
+		echo '</head><body class="idea89-mini-checkout"><div id="idea89-mini-checkout">';
 
-		ob_start();
+		if ( 'block' === $type ) {
+			$this->print_block_checkout();
+		} else {
+			$this->print_shortcode_checkout();
+		}
+
+		echo '</div>';
+		wp_print_inline_script_tag( $this->bridge->handshake_js() );
 		wp_footer();
-		$footer = ob_get_clean();
-
-		$content = 'block' === $type ? $this->render_block_checkout() : $this->render_shortcode_checkout();
-
-		return '<!doctype html><html><head>' . $head . '</head>'
-			. '<body class="idea89-mini-checkout">'
-			. '<div id="idea89-mini-checkout">' . $content . '</div>'
-			. $this->bridge->handshake_script()
-			. $footer
-			. '</body></html>';
+		echo '</body></html>';
 	}
 
 	/**
-	 * Renders the Checkout block path: do_blocks() on the checkout page's
+	 * Prints the Checkout block path: do_blocks() on the checkout page's
 	 * own content, exactly as WordPress would when serving that page
 	 * normally.
 	 *
-	 * @return string
+	 * @return void
 	 */
-	private function render_block_checkout() {
+	private function print_block_checkout() {
 		$post = self::checkout_post();
-		return do_blocks( $post instanceof WP_Post ? $post->post_content : '' );
+
+		// do_blocks() returns the WooCommerce Checkout block's own rendered
+		// markup — the same HTML the_content() prints for the checkout page
+		// when the theme serves it. It is a checkout form: wp_kses_post()
+		// would strip the elements and inline scripts the form needs, so it
+		// is printed as WooCommerce rendered it, exactly as core does.
+		echo do_blocks( $post instanceof WP_Post ? $post->post_content : '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- rendered block HTML, see above.
 	}
 
 	/**
-	 * Renders the classic shortcode path.
+	 * Prints the classic shortcode path: WooCommerce's own rendered
+	 * checkout form, as the theme would print it for the checkout page.
 	 *
-	 * @return string
+	 * @return void
 	 */
-	private function render_shortcode_checkout() {
-		return do_shortcode( '[woocommerce_checkout]' );
+	private function print_shortcode_checkout() {
+		echo do_shortcode( '[woocommerce_checkout]' );
 	}
 
 	/**
@@ -308,7 +320,7 @@ class Idea89_Mini_Checkout {
 	 *
 	 * The window.parent === window guard that actually makes this safe is
 	 * baked into the emitted script itself (Idea89_Checkout_Bridge::
-	 * success_script()) as its first statement, not decided here. What IS
+	 * success_js()) as its first statement, not decided here. What IS
 	 * decided here is whether $order_id is a genuinely completed, loadable
 	 * order — the same belt-and-braces pattern as Magento 2's
 	 * Bridge::getSuccessPayloadJson(), which checks getIncrementId() is
@@ -336,6 +348,6 @@ class Idea89_Mini_Checkout {
 			return;
 		}
 
-		echo $this->bridge->success_script( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- success_script() returns an already-escaped <script> tag.
+		wp_print_inline_script_tag( $this->bridge->success_js( $order ) );
 	}
 }
