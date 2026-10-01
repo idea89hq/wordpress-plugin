@@ -5,7 +5,7 @@ Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.2.3
+Stable tag: 1.2.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -137,6 +137,13 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 
 == Changelog ==
 
+= 1.2.4 =
+* **Failed payments are never shown as a confirmed order.** In the in-chat native checkout, the payment gateway's result is now checked. If the gateway declines or fails the payment, the shopper sees the gateway's own message and no order confirmation.
+* **The in-chat checkout panel confirms only paid orders.** It now reports success only for orders that are processing, completed or on hold. A failed or cancelled order is reported as failed, and a pending payment leaves the shopper on your order page.
+* **Draft orders are hidden from order lookup.** Checkout drafts, auto-drafts and trashed orders can no longer be found through the assistant's order lookup.
+* **Catalogue sync key.** New optional field under IDEA89 > Settings > Connection. Create the key in your IDEA89 dashboard under API & Domains and paste it here. Once a sync arrives with the key, IDEA89 accepts catalogue, price, offer and FAQ updates for your store only when they carry it. Leaving it empty keeps syncing exactly as before.
+* **Agentic Commerce feed protection.** New optional Feed access key: when set, AI agents must send it to read your product feed. The feed now loads one page of products at a time instead of the whole catalogue, is limited to 60 requests a minute per visitor, and a protected feed is never cached publicly.
+
 = 1.2.3 =
 * **Storefront globals are JSON-encoded.** The __IDEA89_WC block (Store API URL, nonce, basket URL) that the assistant reads on boot is now written with wp_json_encode and the same hex-escaping as every other inline value, in place of esc_js, which is meant for attribute context. Same keys, same values; nothing changes for shoppers.
 * **In-chat checkout page is printed, not buffered.** The stripped checkout page is now written the way a page template is: wp_head and wp_footer print themselves and every script element is printed by WordPress's own inline-script function, instead of the whole page being assembled into one string and echoed. Same page, same headers, same bridge messages.
@@ -180,6 +187,9 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 * Initial release. Catalogue, category, page, coupon, FAQ and content sync; storefront chat widget with WooCommerce Store API add-to-cart; admin settings with Test Connection and Sync Now.
 
 == Upgrade Notice ==
+
+= 1.2.4 =
+Checkout safety and security update: failed payments are never shown as confirmed orders, draft orders are hidden from order lookup, and new optional Catalogue sync key and Feed access key settings protect your catalogue and product feed. Nothing changes until you set the new keys.
 
 = 1.2.3 =
 Security hardening only: the storefront globals are JSON-encoded and the in-chat checkout page is printed through WordPress's own functions. No settings or behaviour change.

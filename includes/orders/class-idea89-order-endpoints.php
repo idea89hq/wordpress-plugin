@@ -446,6 +446,13 @@ class Idea89_Order_Endpoints {
 		if ( ctype_digit( $candidate ) ) {
 			$order = wc_get_order( (int) $candidate );
 
+			// wc_get_order() loads an order in ANY status, including
+			// checkout drafts and trash. Hold the id path to the same
+			// shopper-visible statuses the meta fallback below queries.
+			if ( $order instanceof WC_Order && ! in_array( (string) $order->get_status(), $this->listable_statuses(), true ) ) {
+				$order = null;
+			}
+
 			if ( $order instanceof WC_Order && (string) $order->get_order_number() === $number ) {
 				return $order;
 			}

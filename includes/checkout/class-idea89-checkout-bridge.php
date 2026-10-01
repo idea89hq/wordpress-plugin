@@ -99,6 +99,38 @@ class Idea89_Checkout_Bridge {
 	 * @return string JavaScript.
 	 */
 	public function success_js( $order ) {
+		// Reaching the thank-you page is not proof of a placed order: a
+		// declined or abandoned payment lands here too, with the order left
+		// failed, cancelled or pending. Only a confirmed order may tell the
+		// widget "success"; anything else posts a non-success envelope.
+		if ( ! $this->is_confirmed( $order ) ) {
+			$failed  = method_exists( $order, 'has_status' ) && $order->has_status( array( 'failed', 'cancelled' ) );
+			$payload = wp_json_encode(
+				$failed
+					// The widget falls back to its checkout CTA on an error,
+					// which is the right next step after a declined payment.
+					? array(
+						'source' => 'idea89-checkout',
+						'type'   => 'error',
+						'code'   => 'order_failed',
+					)
+					// Pending can mean an off-site payment still settling.
+					// The widget ignores this type, so the panel stays on
+					// WooCommerce's own order page rather than inviting a
+					// second payment through the fallback CTA.
+					: array(
+						'source' => 'idea89-checkout',
+						'type'   => 'pending',
+					),
+				self::JSON_FLAGS
+			);
+
+			return '(function(){'
+				. 'if(window.parent===window){return;}'
+				. 'try{window.parent.postMessage(' . $payload . ',window.location.origin);}catch(e){}'
+				. '})();';
+		}
+
 		$payload = wp_json_encode(
 			array(
 				'source'   => 'idea89-checkout',
@@ -114,6 +146,26 @@ class Idea89_Checkout_Bridge {
 			. 'if(window.parent===window){return;}'
 			. 'try{window.parent.postMessage(' . $payload . ',window.location.origin);}catch(e){}'
 			. '})();';
+	}
+
+	/**
+	 * Whether $order is one the merchant has genuinely accepted: a paid
+	 * status (processing, completed, plus any a plugin registers through
+	 * WooCommerce's own woocommerce_order_is_paid_statuses filter) or
+	 * on-hold, which is where the offline gateways (bacs, cheque) leave a
+	 * placed order awaiting manual payment. An allowlist, not a denylist, so
+	 * pending, failed, cancelled, draft and any unknown status never count.
+	 *
+	 * @param WC_Order $order The order the thank-you page was rendered for.
+	 * @return bool
+	 */
+	public function is_confirmed( $order ) {
+		if ( ! is_object( $order ) || ! method_exists( $order, 'has_status' ) ) {
+			return false;
+		}
+		$statuses   = function_exists( 'wc_get_is_paid_statuses' ) ? (array) wc_get_is_paid_statuses() : array( 'processing', 'completed' );
+		$statuses[] = 'on-hold';
+		return (bool) $order->has_status( $statuses );
 	}
 
 	/**

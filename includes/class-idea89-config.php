@@ -46,6 +46,18 @@ class Idea89_Config {
 	}
 
 	/**
+	 * Optional catalog sync key, generated in the IDEA89 dashboard. When set
+	 * it is sent as X-IDEA89-Sync-Key on every catalog write, so the API key
+	 * alone (which also ships to the storefront widget) cannot change the
+	 * catalog. Empty means the header is not sent.
+	 *
+	 * @return string
+	 */
+	public function get_sync_key() {
+		return trim( (string) get_option( 'idea89_sync_key', '' ) );
+	}
+
+	/**
 	 * API base URL with any trailing slash removed.
 	 *
 	 * @return string

@@ -147,11 +147,19 @@ class Idea89_Client {
 			return false;
 		}
 
+		$headers = $this->headers();
+		// Catalog writes only. Never added when unset: libcurl drops an empty
+		// header value anyway, and an absent key keeps today's behaviour.
+		$sync_key = $this->config->get_sync_key();
+		if ( '' !== $sync_key && 0 === strpos( $path, '/v1/catalog/' ) ) {
+			$headers['X-IDEA89-Sync-Key'] = $sync_key;
+		}
+
 		$response = wp_remote_post(
 			$this->config->get_api_url() . $path,
 			array(
 				'timeout' => $timeout,
-				'headers' => $this->headers(),
+				'headers' => $headers,
 				'body'    => $body,
 			)
 		);

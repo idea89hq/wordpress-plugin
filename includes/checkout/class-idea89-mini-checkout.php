@@ -348,6 +348,8 @@ class Idea89_Mini_Checkout {
 			return;
 		}
 
+		// success_js() checks the order's status itself: a failed, cancelled
+		// or pending order posts a non-success envelope, never "success".
 		wp_print_inline_script_tag( $this->bridge->success_js( $order ) );
 	}
 }

@@ -8,11 +8,15 @@
  * magento-module/Controller/Acp/Feed.php + Model/Acp/FeedBuilder.php (Task
  * 4.3): same three gates (published, catalogue-visible, price-resolvable),
  * same page-size cap, same "out-of-stock survives, unpriced does not"
- * ruling. NOT bearer-gated here — that surface (magento-module's Model/
- * Acp/Auth.php) belongs to a later WooCommerce task; once reachable at all,
- * this route is deliberately public, same as Magento's own feed route is
- * deliberately NOT same-origin gated, because the caller is never the
- * merchant's own storefront.
+ * ruling. Not same-origin gated, same as Magento's own feed route,
+ * because the caller is never the merchant's own storefront. Optionally
+ * bearer-gated instead, mirroring magento-module/Model/Acp/Auth.php: when
+ * the merchant sets the idea89_acp_secret option, a caller must send
+ * `Authorization: Bearer <secret>` (compared with hash_equals) or gets a
+ * 401; left blank, the feed stays public, which is what every integration
+ * built before the secret existed relies on. An `API-Version` header, when
+ * sent, must name a version this feed has been verified against (400
+ * otherwise); absent means "current".
  *
  * GATED on the idea89_acp_enabled option, defaulting to FALSE. Magento's
  * equivalent (Model/CheckoutConfig::isAcpEnabled(), XML_ACP_ENABLED)
@@ -20,9 +24,10 @@
  * third parties, and that is never a default a merchant should discover
  * after the fact. Route registration itself is what is gated (see
  * is_enabled()/register_routes() below), not merely check_permission() —
- * an unregistered route means gated_products()'s unbounded
- * wc_get_products(['limit' => -1]) is never reachable at all while the
- * feed is off, not just unauthenticated-but-callable.
+ * an unregistered route means the catalogue query is never reachable at
+ * all while the feed is off, not just unauthenticated-but-callable. Once
+ * on, the query is paged in the database (at most MAX_PAGE_SIZE products
+ * loaded per request), never the whole catalogue.
  *
  * ONE WooCommerce-specific trap this feed exists to avoid, found live
  * against a real catalogue with "Hide out of stock items from the
@@ -35,7 +40,7 @@
  * therefore silently drop every out-of-stock product on any store running
  * that (common) setting, which is exactly the failure this feed must not
  * have (an out-of-stock product must appear with availability:
- * "out_of_stock", never vanish). gated_products() below reads
+ * "out_of_stock", never vanish). gated_page() below reads
  * WC_Product::get_catalog_visibility() instead — the plain
  * `_catalog_visibility` post meta the merchant actually set, independent
  * of that auto-tagging — so a "Hidden" product is excluded on the
@@ -70,6 +75,44 @@ class Idea89_Acp_Feed {
 	const API_VERSION = '2026-04-17';
 
 	/**
+	 * API-Version header values this feed accepts. Same list as
+	 * magento-module/Model/Acp/Auth.php::SUPPORTED_API_VERSIONS.
+	 */
+	const SUPPORTED_API_VERSIONS = array( self::API_VERSION );
+
+	/**
+	 * Per-IP ceiling for the feed. Each request can load up to
+	 * MAX_PAGE_SIZE products, so an unthrottled caller can still make the
+	 * store do real work in a loop; 60 a minute is far above what a crawler
+	 * walking the pages needs. Checked before the bearer secret, so the
+	 * same ceiling also throttles guessing at it.
+	 */
+	const RATE_LIMIT_MAX    = 60;
+	const RATE_LIMIT_WINDOW = MINUTE_IN_SECONDS;
+	const RATE_LIMIT_PREFIX = 'idea89_acpf_';
+
+	/**
+	 * Per-IP throttle.
+	 *
+	 * @var Idea89_Guest_Rate_Limit
+	 */
+	private $rate_limit;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param Idea89_Guest_Rate_Limit|null $rate_limit Per-IP throttle. Built with the
+	 *                                                 class defaults when omitted.
+	 */
+	public function __construct( ?Idea89_Guest_Rate_Limit $rate_limit = null ) {
+		$this->rate_limit = null !== $rate_limit ? $rate_limit : new Idea89_Guest_Rate_Limit(
+			self::RATE_LIMIT_MAX,
+			self::RATE_LIMIT_WINDOW,
+			self::RATE_LIMIT_PREFIX
+		);
+	}
+
+	/**
 	 * Hooks route registration.
 	 *
 	 * @return void
@@ -85,8 +128,8 @@ class Idea89_Acp_Feed {
 	 * unauthenticated caller gets WordPress's own "route not found" (the
 	 * route was never added to the REST server) rather than a 401/403 that
 	 * would confirm the plugin is installed. It also means
-	 * gated_products()'s unbounded wc_get_products() query is structurally
-	 * unreachable while the feed is off, not merely unauthenticated.
+	 * gated_page()'s wc_get_products() query is structurally unreachable
+	 * while the feed is off, not merely unauthenticated.
 	 *
 	 * @return void
 	 */
@@ -118,16 +161,64 @@ class Idea89_Acp_Feed {
 	}
 
 	/**
-	 * Deliberately public — see this file's class docblock. A named,
-	 * documented callable rather than the literal '__return_true' string
-	 * `wp plugin check` flags: the outcome is the same (always allow), but
-	 * the choice is explicit and reviewable here rather than a bare
-	 * boolean in the route registration array.
+	 * The optional shared bearer secret, or '' when the merchant left it
+	 * blank (meaning: serve the feed publicly).
+	 *
+	 * @return string
+	 */
+	public static function secret() {
+		return trim( (string) get_option( 'idea89_acp_secret', '' ) );
+	}
+
+	/**
+	 * Open at the WordPress level on purpose. The ACP gates (enabled flag,
+	 * bearer secret, API-Version pin) run in handle_feed() via authorize()
+	 * instead, so their refusals carry the same `{error: code}` body the
+	 * Magento feed returns rather than WordPress's own rest_forbidden
+	 * shape. A named, documented callable rather than the literal
+	 * '__return_true' string `wp plugin check` flags.
 	 *
 	 * @return true
 	 */
 	public function check_permission() {
 		return true;
+	}
+
+	/**
+	 * The ACP gate, in Magento's Auth::check() order: not_enabled first (the
+	 * secret is never even read on a disabled store), then the bearer
+	 * secret, then the API-Version pin. Returns the error code, or null when
+	 * the request may proceed.
+	 *
+	 * @param WP_REST_Request $request The incoming request.
+	 * @return string|null
+	 */
+	public function authorize( WP_REST_Request $request ) {
+		if ( ! self::is_enabled() ) {
+			// Defence in depth: register_routes() already skips the route
+			// while the feed is off, so this is only reached if the option
+			// changed after routes were registered for this request.
+			return 'not_enabled';
+		}
+
+		$secret = self::secret();
+		if ( '' !== $secret ) {
+			$header = (string) $request->get_header( 'authorization' );
+			$token  = 0 === strpos( $header, 'Bearer ' ) ? substr( $header, 7 ) : '';
+			// hash_equals(), never ===: a shared secret must not leak timing
+			// proportional to the matching prefix. An empty token can never
+			// match because $secret is non-empty here.
+			if ( ! hash_equals( $secret, $token ) ) {
+				return 'unauthorized';
+			}
+		}
+
+		$version = (string) $request->get_header( 'api-version' );
+		if ( '' !== $version && ! in_array( $version, self::SUPPORTED_API_VERSIONS, true ) ) {
+			return 'unsupported_api_version';
+		}
+
+		return null;
 	}
 
 	/**
@@ -137,6 +228,15 @@ class Idea89_Acp_Feed {
 	 * @return WP_REST_Response
 	 */
 	public function handle_feed( WP_REST_Request $request ) {
+		if ( ! $this->rate_limit->allow( $this->client_ip() ) ) {
+			return $this->error_response( 'rate_limited', 429 );
+		}
+
+		$error = $this->authorize( $request );
+		if ( null !== $error ) {
+			return $this->error_response( $error, self::status_for( $error ) );
+		}
+
 		$page      = (int) $request->get_param( 'page' );
 		$page_size = (int) $request->get_param( 'page_size' );
 		if ( $page_size <= 0 ) {
@@ -146,7 +246,58 @@ class Idea89_Acp_Feed {
 		$body = $this->build( $page, $page_size );
 
 		$response = new WP_REST_Response( $body, 200 );
-		$response->header( 'Cache-Control', 'public, max-age=900' );
+		// A public feed is the same document for every caller, so cacheable.
+		// A bearer-gated one must not be: a shared cache would hand the
+		// authorised body to the next, unauthenticated, requester.
+		$response->header( 'Cache-Control', '' === self::secret() ? 'public, max-age=900' : 'private, no-store' );
+		return $response;
+	}
+
+	/**
+	 * Best-effort client IP for throttling only — same shape as
+	 * Idea89_Order_Endpoints::client_ip().
+	 *
+	 * @return string
+	 */
+	private function client_ip() {
+		if ( isset( $_SERVER['REMOTE_ADDR'] ) ) {
+			return sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
+		}
+		return '0.0.0.0';
+	}
+
+	/**
+	 * HTTP status for an authorize() error code, same mapping as
+	 * magento-module/Controller/Acp/Feed.php::statusFor().
+	 *
+	 * @param string $error Error code.
+	 * @return int
+	 */
+	private static function status_for( $error ) {
+		switch ( $error ) {
+			case 'not_enabled':
+				return 404;
+			case 'unauthorized':
+				return 401;
+			default:
+				return 400;
+		}
+	}
+
+	/**
+	 * An `{error: code}` refusal, never cacheable: a cached 404 or 401 would
+	 * outlive the merchant switching the feed on or handing out the token.
+	 *
+	 * @param string $error  Error code.
+	 * @param int    $status HTTP status.
+	 * @return WP_REST_Response
+	 */
+	private function error_response( $error, $status ) {
+		$response = new WP_REST_Response( array( 'error' => $error ), $status );
+		$response->header( 'Cache-Control', 'no-store' );
+		if ( 401 === $status ) {
+			$response->header( 'WWW-Authenticate', 'Bearer' );
+		}
 		return $response;
 	}
 
@@ -163,21 +314,10 @@ class Idea89_Acp_Feed {
 		$page      = max( 1, (int) $page );
 		$page_size = max( 1, min( self::MAX_PAGE_SIZE, (int) $page_size ) );
 
-		$gated = $this->gated_products();
-		$total = count( $gated );
-
-		// Plain array_slice, not a DB-level LIMIT/OFFSET: gated_products()
-		// already loaded and filtered the whole catalogue into memory (see
-		// its own docblock for why the filtering cannot safely happen at
-		// the DB level), so slicing here is both correct for any requested
-		// page — including one past the end, which simply yields an empty
-		// products array — and avoids the class of pagination bug the
-		// Magento feed hit trying to reconcile a DB LIMIT against a
-		// post-load PHP filter.
-		$slice = array_slice( $gated, ( $page - 1 ) * $page_size, $page_size );
+		$gated = $this->gated_page( $page, $page_size );
 
 		$products = array();
-		foreach ( $slice as $item ) {
+		foreach ( $gated['items'] as $item ) {
 			$products[] = $this->serialize( $item['product'], $item['price'] );
 		}
 
@@ -189,57 +329,74 @@ class Idea89_Acp_Feed {
 			),
 			'page'      => $page,
 			'page_size' => $page_size,
-			'total'     => $total,
+			'total'     => $gated['total'],
 			'products'  => $products,
 		);
 	}
 
 	/**
-	 * Every published, catalogue-visible, price-resolvable product, each
-	 * paired with its already-resolved price so build() never recomputes
-	 * it. See the class docblock for why catalogue visibility is read from
+	 * One database page of published products, filtered to the
+	 * catalogue-visible, price-resolvable ones, each paired with its
+	 * already-resolved price so build() never recomputes it. See the class
+	 * docblock for why catalogue visibility is read from
 	 * get_catalog_visibility() rather than a product_visibility tax_query.
 	 *
-	 * @return array<int, array{product: object, price: float}>
+	 * Paged in the query (limit/page/paginate), so a request loads at most
+	 * MAX_PAGE_SIZE products whatever the catalogue size. The visibility and
+	 * price gates still run in PHP on that page, so a page can hold fewer
+	 * than page_size products, and `total` is the database count of
+	 * published products minus those skipped on THIS page: the same
+	 * approach as magento-module's FeedBuilder, exact whenever nothing is
+	 * skipped, otherwise an upper bound. Pages are fixed database windows,
+	 * so walking page 1..N never skips or repeats a product.
+	 *
+	 * @param int $page      Page, already clamped to >= 1.
+	 * @param int $page_size Page size, already clamped to 1..MAX_PAGE_SIZE.
+	 * @return array{items: array<int, array{product: object, price: float}>, total: int}
 	 */
-	private function gated_products() {
+	private function gated_page( $page, $page_size ) {
+		$empty = array(
+			'items' => array(),
+			'total' => 0,
+		);
+
 		if ( ! function_exists( 'wc_get_products' ) ) {
-			return array();
+			return $empty;
 		}
 
-		// limit => -1: every published product loaded into memory, THEN
-		// filtered in PHP. Deliberate — see the class docblock's reasoning
-		// on why the catalogue-visibility gate cannot safely be pushed into
-		// the query itself. Fine at the catalogue sizes this plugin targets
-		// (the same assumption Idea89_Catalog_Syncer::BATCH_SIZE-paged sync
-		// does not need to make, because a sync has no "current page" to
-		// keep correct against a PHP-side filter).
-		$products = wc_get_products(
+		$result = wc_get_products(
 			array(
-				'status'  => 'publish',
-				'limit'   => -1,
-				'orderby' => 'ID',
-				'order'   => 'ASC',
+				'status'   => 'publish',
+				'limit'    => $page_size,
+				'page'     => $page,
+				'paginate' => true,
+				'orderby'  => 'ID',
+				'order'    => 'ASC',
 			)
 		);
 
-		if ( ! is_array( $products ) ) {
-			return array();
+		if ( ! is_object( $result ) || ! isset( $result->products ) || ! is_array( $result->products ) ) {
+			return $empty;
 		}
 
-		$out = array();
-		foreach ( $products as $product ) {
+		$total   = isset( $result->total ) ? (int) $result->total : 0;
+		$skipped = 0;
+		$out     = array();
+		foreach ( $result->products as $product ) {
 			if ( ! is_object( $product ) || ! method_exists( $product, 'get_catalog_visibility' ) ) {
+				++$skipped;
 				continue;
 			}
 
 			if ( 'hidden' === $product->get_catalog_visibility() ) {
+				++$skipped;
 				continue;
 			}
 
 			$price = $this->resolved_price( $product );
 			if ( null === $price ) {
 				$this->log( 'omitting product with no resolvable price', $product );
+				++$skipped;
 				continue;
 			}
 
@@ -249,7 +406,10 @@ class Idea89_Acp_Feed {
 			);
 		}
 
-		return $out;
+		return array(
+			'items' => $out,
+			'total' => max( 0, $total - $skipped ),
+		);
 	}
 
 	/**

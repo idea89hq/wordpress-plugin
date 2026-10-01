@@ -528,11 +528,31 @@ class Idea89_Checkout_Rest {
 			// cart — the same sequence a normal checkout submission runs, not
 			// a re-implementation of it.
 			$gateway = $allowed[ $payment_method ];
-			$gateway->process_payment( $order_id );
+			$result  = $gateway->process_payment( $order_id );
+
+			// A gateway signals failure by returning anything other than
+			// result=success (WooCommerce core's own checkout reads it the
+			// same way). The widget renders "Order confirmed" on a 200, so a
+			// failed payment must never reach that branch.
+			if ( ! is_array( $result ) || ! isset( $result['result'] ) || 'success' !== $result['result'] ) {
+				return $this->error_response( 'payment_failed', __( 'We could not take payment for your order. Please try again or choose another payment method.', 'idea89-ai-shopping-assistant' ), 402 );
+			}
+
+			// Re-read: process_payment() moved the status on a fresh copy,
+			// the $order loaded above still carries the pre-payment one.
+			$placed = wc_get_order( $order_id );
+			if ( $placed ) {
+				$order = $placed;
+			}
+			$status = method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '';
+			if ( in_array( $status, array( 'failed', 'cancelled' ), true ) ) {
+				return $this->error_response( 'payment_failed', __( 'We could not take payment for your order. Please try again or choose another payment method.', 'idea89-ai-shopping-assistant' ), 402 );
+			}
 
 			return new WP_REST_Response(
 				array(
 					'order_id' => (string) $order->get_order_number(),
+					'status'   => $status,
 					'total'    => $this->format_amount( $order->get_total() ),
 					'currency' => (string) $order->get_currency(),
 				),

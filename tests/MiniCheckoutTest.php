@@ -62,9 +62,14 @@ class Fake_WC_Order {
 				'order_number' => '1042',
 				'total'        => '59.98',
 				'currency'     => 'GBP',
+				'status'       => 'processing',
 			),
 			$data
 		);
+	}
+
+	public function has_status( $status ) {
+		return in_array( $this->data['status'], (array) $status, true );
 	}
 
 	public function get_order_number() {
@@ -565,5 +570,48 @@ class MiniCheckoutTest extends TestCase {
 			'We could not identify your checkout page, so the assistant will send shoppers to it instead of showing it in the chat.',
 			Idea89_Admin_Settings::checkout_probe_message( 'unknown' )
 		);
+	}
+
+	/* ---------------- only a confirmed order signals success ---------------- */
+
+	public function test_success_script_is_sent_for_on_hold_and_completed_orders() {
+		$bridge = new Idea89_Checkout_Bridge();
+		foreach ( array( 'processing', 'completed', 'on-hold' ) as $status ) {
+			$js = $bridge->success_js( new Fake_WC_Order( array( 'status' => $status ) ) );
+			$this->assertStringContainsString( '"type":"success"', $js, $status );
+		}
+	}
+
+	public function test_a_failed_or_cancelled_order_posts_an_error_not_success() {
+		$bridge = new Idea89_Checkout_Bridge();
+		foreach ( array( 'failed', 'cancelled' ) as $status ) {
+			$js = $bridge->success_js( new Fake_WC_Order( array( 'status' => $status ) ) );
+			$this->assertStringNotContainsString( '"type":"success"', $js, $status );
+			$this->assertStringNotContainsString( '"orderId"', $js, $status );
+			$this->assertStringContainsString( '"type":"error"', $js, $status );
+			$this->assertStringContainsString( '"code":"order_failed"', $js, $status );
+			$this->assertStringStartsWith( '(function(){if(window.parent===window){return;}', $js );
+		}
+	}
+
+	public function test_a_pending_or_draft_order_posts_a_non_success() {
+		$bridge = new Idea89_Checkout_Bridge();
+		foreach ( array( 'pending', 'checkout-draft', 'trash', 'some-unknown-status' ) as $status ) {
+			$js = $bridge->success_js( new Fake_WC_Order( array( 'status' => $status ) ) );
+			$this->assertStringNotContainsString( '"type":"success"', $js, $status );
+			$this->assertStringContainsString( '"type":"pending"', $js, $status );
+		}
+	}
+
+	public function test_thank_you_hook_does_not_signal_success_for_a_failed_order() {
+		Functions\when( 'wc_get_order' )->justReturn( new Fake_WC_Order( array( 'status' => 'failed' ) ) );
+		$mini = $this->embedded_mini_checkout();
+
+		ob_start();
+		$mini->render_success_bridge( 1042 );
+		$output = ob_get_clean();
+
+		$this->assertStringNotContainsString( '"type":"success"', $output );
+		$this->assertStringContainsString( '"code":"order_failed"', $output );
 	}
 }

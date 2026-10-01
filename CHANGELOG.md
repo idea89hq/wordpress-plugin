@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2026-10-01
+
+### Fixed
+- **Native checkout honours the payment gateway's result.**
+  `handle_place` ignored the value `process_payment()` returned, so a
+  declined or failed payment still produced a 200 with an order id and the
+  widget showed "Order confirmed". Anything other than `result: success`,
+  or an order left failed or cancelled, now returns 402 `payment_failed`
+  with the gateway's shopper-safe message and no order id. Success responses
+  include the order status.
+- **Embedded checkout bridge confirms only paid or on-hold orders.**
+  Failed and cancelled orders post `order_failed`; pending and unknown
+  statuses post `pending`, which the widget ignores.
+
+### Security
+- **Order lookup by id skips draft, auto-draft and trashed orders.**
+- **ACP feed:** optional bearer secret (`idea89_acp_secret`, compared with
+  `hash_equals`) and API-Version pin; paginated `wc_get_products` query
+  instead of loading the whole catalogue; 60 requests per minute per IP;
+  `Cache-Control: private, no-store` when a secret is set.
+
+### Added
+- **Catalogue sync key** (`idea89_sync_key`, not autoloaded, removed on
+  uninstall), sent as `X-IDEA89-Sync-Key` on catalogue writes only.
+
 ## [1.2.3] - 2026-09-20
 
 ### Security

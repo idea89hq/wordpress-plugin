@@ -237,6 +237,13 @@ class Idea89_Admin_Settings {
 				'type'              => 'string',
 				'sanitize_callback' => array( __CLASS__, 'sanitize_api_url' ),
 			),
+			// Optional. Secret, so kept out of the autoloaded cache like the
+			// API key. Sent only on catalog writes; see Idea89_Client::post().
+			'idea89_sync_key'                     => array(
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+				'autoload'          => false,
+			),
 			// The push to IDEA89 lives in the sanitize callback, the only hook
 			// that can still refuse the value. See sanitize_assistant_name().
 			'idea89_assistant_name'               => array(
@@ -293,6 +300,14 @@ class Idea89_Admin_Settings {
 				'type'              => 'boolean',
 				'sanitize_callback' => 'rest_sanitize_boolean',
 				'default'           => false,
+			),
+			// Optional. Secret, so kept out of the autoloaded cache like the
+			// API key. Blank keeps the feed public; set, callers must send it
+			// as a bearer token. See Idea89_Acp_Feed::authorize().
+			'idea89_acp_secret'                   => array(
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+				'autoload'          => false,
 			),
 			// Default true: a fresh install should sync categories, pages, store
 			// info and FAQs alongside products, not just products. The syncers
@@ -409,6 +424,7 @@ class Idea89_Admin_Settings {
 		$this->add_field( 'idea89_enabled', __( 'Enable assistant', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_general' );
 		$this->add_field( 'idea89_api_key', __( 'API key', 'idea89-ai-shopping-assistant' ), 'password', 'idea89_general' );
 		$this->add_field( 'idea89_api_url', __( 'API URL', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_general' );
+		$this->add_field( 'idea89_sync_key', __( 'Catalog sync key (optional)', 'idea89-ai-shopping-assistant' ), 'password', 'idea89_general' );
 
 		add_settings_section(
 			'idea89_appearance',
@@ -449,6 +465,7 @@ class Idea89_Admin_Settings {
 		);
 
 		$this->add_field( 'idea89_acp_enabled', __( 'Let AI agents shop your store', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_acp' );
+		$this->add_field( 'idea89_acp_secret', __( 'Feed access key (optional)', 'idea89-ai-shopping-assistant' ), 'password', 'idea89_acp' );
 
 		add_settings_section(
 			'idea89_content',
@@ -595,6 +612,7 @@ class Idea89_Admin_Settings {
 	public function render_acp_intro() {
 		echo '<p>' . esc_html__( 'Publishes your catalogue in the Agentic Commerce Protocol format so assistants such as ChatGPT can find and recommend your products. This is separate from the assistant checkout mode above and works alongside any of those settings.', 'idea89-ai-shopping-assistant' ) . '</p>';
 		echo '<p class="description">' . esc_html__( 'Turning this on makes your product names, descriptions, prices, stock and page links visible to any caller at a public web address. It does not give anyone access to your orders, customers or payment details.', 'idea89-ai-shopping-assistant' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'To limit the feed to agents you have approved, set a feed access key below and give it only to them. They must then send it as a bearer token (Authorization: Bearer followed by the key). Leave it blank to keep the feed public.', 'idea89-ai-shopping-assistant' ) . '</p>';
 		if ( Idea89_Acp_Feed::is_enabled() ) {
 			printf(
 				'<p class="description">%s <code>%s</code></p>',

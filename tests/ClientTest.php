@@ -113,6 +113,76 @@ class ClientTest extends TestCase {
 		$this->assertTrue( $client->upsert_products( array( array( 'external_id' => '1' ) ) ) );
 	}
 
+	private function with_sync_key( $key ) {
+		Functions\when( 'get_option' )->alias(
+			function ( $name, $default = '' ) use ( $key ) {
+				if ( 'idea89_api_key' === $name ) {
+					return 'sk_test_key';
+				}
+				if ( 'idea89_api_url' === $name ) {
+					return 'https://api.example.test';
+				}
+				if ( 'idea89_sync_key' === $name ) {
+					return $key;
+				}
+				return $default;
+			}
+		);
+	}
+
+	public function test_catalog_writes_carry_the_sync_key_when_one_is_set() {
+		$this->with_sync_key( '  sync_secret_123 ' );
+		$sent = array();
+		Functions\when( 'wp_remote_post' )->alias(
+			function ( $url, $args ) use ( &$sent ) {
+				$sent[ $url ] = $args['headers'];
+				return array( 'response' => array( 'code' => 200 ), 'body' => '{}' );
+			}
+		);
+
+		$client = new Idea89_Client( new Idea89_Config() );
+		$client->upsert_products( array( array( 'external_id' => '1' ) ) );
+		$client->delete_products( array( '1' ) );
+		$client->upsert_stock( array( array( 'external_id' => '1' ) ) );
+
+		$this->assertCount( 3, $sent );
+		foreach ( $sent as $url => $headers ) {
+			$this->assertSame( 'sync_secret_123', $headers['X-IDEA89-Sync-Key'], $url );
+		}
+	}
+
+	public function test_non_catalog_writes_never_carry_the_sync_key() {
+		$this->with_sync_key( 'sync_secret_123' );
+		$sent = null;
+		Functions\when( 'wp_remote_post' )->alias(
+			function ( $url, $args ) use ( &$sent ) {
+				$sent = $args['headers'];
+				return array( 'response' => array( 'code' => 200 ), 'body' => '{}' );
+			}
+		);
+
+		$client = new Idea89_Client( new Idea89_Config() );
+		$client->update_checkout_ui( 'full' );
+
+		$this->assertArrayNotHasKey( 'X-IDEA89-Sync-Key', $sent );
+	}
+
+	public function test_no_sync_key_header_is_sent_when_none_is_set() {
+		$sent = null;
+		Functions\when( 'wp_remote_post' )->alias(
+			function ( $url, $args ) use ( &$sent ) {
+				$sent = $args['headers'];
+				return array( 'response' => array( 'code' => 200 ), 'body' => '{}' );
+			}
+		);
+
+		$client = new Idea89_Client( new Idea89_Config() );
+		$client->upsert_products( array( array( 'external_id' => '1' ) ) );
+
+		$this->assertArrayNotHasKey( 'X-IDEA89-Sync-Key', $sent );
+		$this->assertSame( 'sk_test_key', $sent['X-IDEA89-Key'] );
+	}
+
 	public function test_test_connection_reports_the_site_the_key_belongs_to() {
 		Functions\when( 'wp_remote_get' )->justReturn(
 			array(

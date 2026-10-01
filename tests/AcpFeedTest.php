@@ -4,6 +4,7 @@ use Brain\Monkey;
 use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
 
+require_once IDEA89_PLUGIN_DIR . 'includes/orders/class-idea89-guest-rate-limit.php';
 require_once IDEA89_PLUGIN_DIR . 'includes/acp/class-idea89-acp-feed.php';
 
 /**
@@ -75,6 +76,12 @@ class AcpFeedTest extends TestCase {
 			}
 		);
 		Functions\when( 'taxonomy_exists' )->justReturn( false );
+		// The per-IP throttle starts empty; the rate-limit tests below
+		// override get_transient() to simulate an exhausted bucket.
+		Functions\when( 'get_transient' )->justReturn( false );
+		Functions\when( 'set_transient' )->justReturn( true );
+		Functions\when( 'sanitize_text_field' )->returnArg();
+		Functions\when( 'wp_unslash' )->returnArg();
 	}
 
 	protected function tearDown(): void {
@@ -86,11 +93,50 @@ class AcpFeedTest extends TestCase {
 	 * @param Idea89_Fake_Acp_Product[] $products
 	 */
 	private function with_products( array $products ) {
-		Functions\when( 'wc_get_products' )->justReturn( $products );
+		// Behaves like wc_get_products() with paginate => true: slices by
+		// limit/page and reports the full count, so these tests exercise the
+		// same database-paged contract the real query has.
+		Functions\when( 'wc_get_products' )->alias(
+			function ( $args ) use ( $products ) {
+				$limit = (int) $args['limit'];
+				$page  = isset( $args['page'] ) ? (int) $args['page'] : 1;
+				$slice = $limit > 0 ? array_slice( $products, ( $page - 1 ) * $limit, $limit ) : $products;
+				return (object) array(
+					'products'      => $slice,
+					'total'         => count( $products ),
+					'max_num_pages' => $limit > 0 ? (int) ceil( count( $products ) / $limit ) : 1,
+				);
+			}
+		);
 	}
 
 	private function feed() {
 		return new Idea89_Acp_Feed();
+	}
+
+	/**
+	 * Feed switched on, plus whatever other options the test sets.
+	 *
+	 * @param array<string,mixed> $options Option name => value.
+	 */
+	private function with_options( array $options = array() ) {
+		$options = array_merge( array( 'idea89_acp_enabled' => true ), $options );
+		Functions\when( 'get_option' )->alias(
+			function ( $name, $default = false ) use ( $options ) {
+				return array_key_exists( $name, $options ) ? $options[ $name ] : $default;
+			}
+		);
+	}
+
+	/**
+	 * @param array<string,string> $headers Header name => value.
+	 */
+	private function request( array $headers = array() ) {
+		$request = new WP_REST_Request();
+		foreach ( $headers as $key => $value ) {
+			$request->set_header( $key, $value );
+		}
+		return $request;
 	}
 
 	public function test_check_permission_is_deliberately_public() {
@@ -120,7 +166,7 @@ class AcpFeedTest extends TestCase {
 	public function test_register_routes_does_not_register_when_disabled() {
 		// The gate is on REGISTRATION, not merely check_permission(): an
 		// unauthenticated caller must get WordPress's own "route not found"
-		// (the route was never added), and gated_products()'s unbounded
+		// (the route was never added), and gated_page()'s catalogue
 		// wc_get_products() query must be structurally unreachable — not
 		// just unauthenticated-but-callable.
 		Functions\when( 'get_option' )->justReturn( false );
@@ -199,7 +245,7 @@ class AcpFeedTest extends TestCase {
 		// product_visibility terms as a genuinely hidden one. This product
 		// is deliberately still 'visible' in catalog_visibility (the
 		// merchant never hid it) — only is_in_stock() is false — proving
-		// gated_products() does not confuse the two.
+		// gated_page() does not confuse the two.
 		$this->with_products(
 			array(
 				new Idea89_Fake_Acp_Product(
@@ -273,6 +319,7 @@ class AcpFeedTest extends TestCase {
 		// (a useful full page), not let it fall through to build()'s
 		// floor of 1.
 		$this->with_products( array( new Idea89_Fake_Acp_Product() ) );
+		$this->with_options();
 
 		$request = new WP_REST_Request();
 		$response = $this->feed()->handle_feed( $request );
@@ -325,17 +372,239 @@ class AcpFeedTest extends TestCase {
 		$this->assertSame( 'https://shop.example.test', $result['seller']['url'] );
 	}
 
-	public function test_gated_products_queries_only_published_products() {
+	/**
+	 * @return array<string,mixed>|null The args build() passed to wc_get_products().
+	 */
+	private function capture_query( $page, $page_size ) {
 		$captured = null;
 		Functions\when( 'wc_get_products' )->alias(
 			function ( $args ) use ( &$captured ) {
 				$captured = $args;
-				return array();
+				return (object) array(
+					'products'      => array(),
+					'total'         => 0,
+					'max_num_pages' => 0,
+				);
 			}
 		);
 
-		$this->feed()->build( 1, 200 );
+		$this->feed()->build( $page, $page_size );
 
-		$this->assertSame( 'publish', $captured['status'] );
+		return $captured;
+	}
+
+	public function test_gated_products_queries_only_published_products() {
+		$this->assertSame( 'publish', $this->capture_query( 1, 200 )['status'] );
+	}
+
+	/* ---------------- U9: paged in the query, never the whole catalogue ---------------- */
+
+	public function test_the_query_is_paged_in_the_database_not_unbounded() {
+		$args = $this->capture_query( 3, 50 );
+
+		$this->assertSame( 50, $args['limit'] );
+		$this->assertSame( 3, $args['page'] );
+		$this->assertTrue( $args['paginate'] );
+	}
+
+	public function test_an_oversized_page_size_never_reaches_the_query() {
+		$this->assertSame( Idea89_Acp_Feed::MAX_PAGE_SIZE, $this->capture_query( 1, 100000 )['limit'] );
+	}
+
+	public function test_total_is_the_database_count_not_the_page_count() {
+		$products = array();
+		for ( $i = 1; $i <= 7; $i++ ) {
+			$products[] = new Idea89_Fake_Acp_Product(
+				array(
+					'sku' => 'SKU-' . $i,
+					'id'  => $i,
+				)
+			);
+		}
+		$this->with_products( $products );
+
+		$result = $this->feed()->build( 2, 3 );
+
+		$this->assertSame( 7, $result['total'] );
+		$this->assertSame( array( 'SKU-4', 'SKU-5', 'SKU-6' ), array_column( $result['products'], 'id' ) );
+	}
+
+	public function test_a_skipped_product_on_the_page_is_taken_off_total() {
+		$this->with_products(
+			array(
+				new Idea89_Fake_Acp_Product( array( 'sku' => 'A', 'id' => 1 ) ),
+				new Idea89_Fake_Acp_Product(
+					array(
+						'sku'                => 'HIDDEN',
+						'id'                 => 2,
+						'catalog_visibility' => 'hidden',
+					)
+				),
+				new Idea89_Fake_Acp_Product( array( 'sku' => 'C', 'id' => 3 ) ),
+			)
+		);
+
+		$result = $this->feed()->build( 1, 2 );
+
+		$this->assertSame( array( 'A' ), array_column( $result['products'], 'id' ) );
+		$this->assertSame( 2, $result['total'] );
+	}
+
+	public function test_an_unpaginated_query_result_yields_an_empty_feed_not_an_error() {
+		Functions\when( 'wc_get_products' )->justReturn( array() );
+
+		$result = $this->feed()->build( 1, 200 );
+
+		$this->assertSame( array(), $result['products'] );
+		$this->assertSame( 0, $result['total'] );
+	}
+
+	/* ---------------- U9: optional bearer secret + API-Version pin ---------------- */
+
+	public function test_feed_is_public_when_no_secret_is_set() {
+		$this->with_products( array( new Idea89_Fake_Acp_Product() ) );
+		$this->with_options( array( 'idea89_acp_secret' => '' ) );
+
+		$response = $this->feed()->handle_feed( $this->request() );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'public, max-age=900', $response->headers['Cache-Control'] );
+	}
+
+	public function test_secret_set_rejects_a_missing_authorization_header() {
+		$this->with_products( array( new Idea89_Fake_Acp_Product() ) );
+		$this->with_options( array( 'idea89_acp_secret' => 's3cret-value' ) );
+
+		$response = $this->feed()->handle_feed( $this->request() );
+
+		$this->assertSame( 401, $response->get_status() );
+		$this->assertSame( array( 'error' => 'unauthorized' ), $response->get_data() );
+		$this->assertSame( 'no-store', $response->headers['Cache-Control'] );
+	}
+
+	public function test_secret_set_rejects_a_wrong_token() {
+		$this->with_products( array( new Idea89_Fake_Acp_Product() ) );
+		$this->with_options( array( 'idea89_acp_secret' => 's3cret-value' ) );
+
+		$response = $this->feed()->handle_feed( $this->request( array( 'Authorization' => 'Bearer s3cret-valuX' ) ) );
+
+		$this->assertSame( 401, $response->get_status() );
+	}
+
+	public function test_secret_set_rejects_the_secret_without_the_bearer_prefix() {
+		$this->with_products( array( new Idea89_Fake_Acp_Product() ) );
+		$this->with_options( array( 'idea89_acp_secret' => 's3cret-value' ) );
+
+		$response = $this->feed()->handle_feed( $this->request( array( 'Authorization' => 's3cret-value' ) ) );
+
+		$this->assertSame( 401, $response->get_status() );
+	}
+
+	public function test_secret_set_accepts_the_right_bearer_token_and_is_not_publicly_cacheable() {
+		$this->with_products( array( new Idea89_Fake_Acp_Product() ) );
+		$this->with_options( array( 'idea89_acp_secret' => 's3cret-value' ) );
+
+		$response = $this->feed()->handle_feed( $this->request( array( 'Authorization' => 'Bearer s3cret-value' ) ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 1, $response->get_data()['products'] );
+		// A shared cache must never hand an authorised body to the next caller.
+		$this->assertStringNotContainsString( 'public', $response->headers['Cache-Control'] );
+	}
+
+	public function test_handle_feed_returns_404_when_acp_is_disabled() {
+		$this->with_products( array( new Idea89_Fake_Acp_Product() ) );
+		$this->with_options( array( 'idea89_acp_enabled' => false ) );
+
+		$response = $this->feed()->handle_feed( $this->request() );
+
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'not_enabled', $response->get_data()['error'] );
+	}
+
+	public function test_an_unsupported_api_version_is_refused() {
+		$this->with_products( array( new Idea89_Fake_Acp_Product() ) );
+		$this->with_options();
+
+		$response = $this->feed()->handle_feed( $this->request( array( 'API-Version' => '2025-01-01' ) ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'unsupported_api_version', $response->get_data()['error'] );
+	}
+
+	public function test_the_supported_api_version_is_accepted() {
+		$this->with_products( array( new Idea89_Fake_Acp_Product() ) );
+		$this->with_options();
+
+		$response = $this->feed()->handle_feed( $this->request( array( 'API-Version' => Idea89_Acp_Feed::API_VERSION ) ) );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	public function test_bearer_is_checked_before_the_api_version() {
+		// Same order as Magento's Auth::check(): an unauthorised caller
+		// learns nothing about which versions the feed supports.
+		$this->with_products( array() );
+		$this->with_options( array( 'idea89_acp_secret' => 's3cret-value' ) );
+
+		$response = $this->feed()->handle_feed( $this->request( array( 'API-Version' => 'bogus' ) ) );
+
+		$this->assertSame( 401, $response->get_status() );
+	}
+
+	/* ---------------- U9: per-IP rate limit ---------------- */
+
+	public function test_feed_is_rate_limited_once_the_bucket_is_full() {
+		$this->with_products( array( new Idea89_Fake_Acp_Product() ) );
+		$this->with_options();
+		Functions\when( 'get_transient' )->justReturn( Idea89_Acp_Feed::RATE_LIMIT_MAX );
+
+		$response = $this->feed()->handle_feed( $this->request() );
+
+		$this->assertSame( 429, $response->get_status() );
+		$this->assertSame( array( 'error' => 'rate_limited' ), $response->get_data() );
+		$this->assertSame( 'no-store', $response->headers['Cache-Control'] );
+	}
+
+	public function test_feed_is_served_below_the_ceiling() {
+		$this->with_products( array( new Idea89_Fake_Acp_Product() ) );
+		$this->with_options();
+		Functions\when( 'get_transient' )->justReturn( Idea89_Acp_Feed::RATE_LIMIT_MAX - 1 );
+
+		$response = $this->feed()->handle_feed( $this->request() );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	public function test_rate_limit_runs_before_the_bearer_check() {
+		// Otherwise the secret could be guessed at an unthrottled rate.
+		$this->with_products( array() );
+		$this->with_options( array( 'idea89_acp_secret' => 's3cret-value' ) );
+		Functions\when( 'get_transient' )->justReturn( Idea89_Acp_Feed::RATE_LIMIT_MAX );
+
+		$response = $this->feed()->handle_feed( $this->request( array( 'Authorization' => 'Bearer wrong' ) ) );
+
+		$this->assertSame( 429, $response->get_status() );
+	}
+
+	public function test_the_feed_bucket_has_its_own_prefix_and_ceiling() {
+		$this->with_products( array() );
+		$this->with_options();
+		$keys = array();
+		$ttls = array();
+		Functions\when( 'set_transient' )->alias(
+			function ( $key, $value, $ttl ) use ( &$keys, &$ttls ) {
+				$keys[] = $key;
+				$ttls[] = $ttl;
+				return true;
+			}
+		);
+
+		$this->feed()->handle_feed( $this->request() );
+
+		$this->assertSame( 60, Idea89_Acp_Feed::RATE_LIMIT_MAX );
+		$this->assertCount( 1, $keys );
+		$this->assertStringStartsWith( Idea89_Acp_Feed::RATE_LIMIT_PREFIX, $keys[0] );
+		$this->assertSame( MINUTE_IN_SECONDS, $ttls[0] );
 	}
 }

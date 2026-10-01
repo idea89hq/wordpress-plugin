@@ -11,6 +11,7 @@ $idea89_options = array(
 	'idea89_enabled',
 	'idea89_api_key',
 	'idea89_api_url',
+	'idea89_sync_key',
 	'idea89_assistant_name',
 	'idea89_store_context',
 	'idea89_widget_position',
@@ -50,6 +51,7 @@ $idea89_options = array(
 	'idea89_checkout_bar_enabled',
 	'idea89_checkout_native_methods',
 	'idea89_acp_enabled',
+	'idea89_acp_secret',
 );
 
 foreach ( $idea89_options as $idea89_option ) {

@@ -219,6 +219,8 @@ class Idea89_Fake_Gateway {
 	public $id;
 	private $title;
 	public $process_payment_calls = array();
+	/** @var mixed What process_payment() returns; null means the default success array. */
+	public $payment_result = null;
 
 	public function __construct( $id, $title ) {
 		$this->id    = $id;
@@ -235,6 +237,9 @@ class Idea89_Fake_Gateway {
 
 	public function process_payment( $order_id ) {
 		$this->process_payment_calls[] = $order_id;
+		if ( null !== $this->payment_result ) {
+			return $this->payment_result;
+		}
 		return array(
 			'result'   => 'success',
 			'redirect' => '',
@@ -293,9 +298,14 @@ class Idea89_Fake_WC_Order {
 				'order_number' => '2001',
 				'total'        => '59.98',
 				'currency'     => 'GBP',
+				'status'       => 'processing',
 			),
 			$data
 		);
+	}
+
+	public function get_status() {
+		return $this->data['status'];
 	}
 
 	public function get_order_number() {
@@ -964,6 +974,7 @@ class CheckoutRestTest extends TestCase {
 		$this->assertSame( '2001', $data['order_id'] );
 		$this->assertSame( '59.98', $data['total'] );
 		$this->assertSame( 'GBP', $data['currency'] );
+		$this->assertSame( 'processing', $data['status'] );
 
 		$calls = $this->wc->checkout()->create_order_calls;
 		$this->assertCount( 1, $calls );
@@ -985,5 +996,58 @@ class CheckoutRestTest extends TestCase {
 		$this->assertSame( 400, $response->get_status() );
 		$gateway = $this->wc->payment_gateways()->get_available_payment_gateways()['cod'];
 		$this->assertSame( array(), $gateway->process_payment_calls );
+	}
+
+	public function test_place_does_not_claim_success_when_the_gateway_reports_failure() {
+		$this->with_options( array( 'idea89_checkout_native_methods' => array( 'cod' ) ) );
+		$this->cart->empty                     = false;
+		$this->customer->data['billing_email'] = 'shopper@example.test';
+		$gateway                 = $this->wc->payment_gateways()->get_available_payment_gateways()['cod'];
+		$gateway->payment_result = array( 'result' => 'failure' );
+
+		$response = $this->rest()->handle_place( $this->request_with_body( array( 'payment_method' => 'cod' ) ) );
+		$data     = $response->get_data();
+
+		$this->assertSame( 402, $response->get_status() );
+		$this->assertSame( 'payment_failed', $data['error'] );
+		$this->assertNotEmpty( $data['message'] );
+		$this->assertArrayNotHasKey( 'order_id', $data );
+	}
+
+	public function test_place_does_not_claim_success_when_the_gateway_returns_nothing() {
+		$this->with_options( array( 'idea89_checkout_native_methods' => array( 'cod' ) ) );
+		$this->cart->empty                     = false;
+		$this->customer->data['billing_email'] = 'shopper@example.test';
+		$gateway                 = $this->wc->payment_gateways()->get_available_payment_gateways()['cod'];
+		$gateway->payment_result = false;
+
+		$response = $this->rest()->handle_place( $this->request_with_body( array( 'payment_method' => 'cod' ) ) );
+
+		$this->assertSame( 402, $response->get_status() );
+		$this->assertArrayNotHasKey( 'order_id', $response->get_data() );
+	}
+
+	public function test_place_does_not_claim_success_when_the_order_ends_up_failed() {
+		$this->with_options( array( 'idea89_checkout_native_methods' => array( 'cod' ) ) );
+		$this->cart->empty                     = false;
+		$this->customer->data['billing_email'] = 'shopper@example.test';
+		Functions\when( 'wc_get_order' )->justReturn( new Idea89_Fake_WC_Order( array( 'status' => 'failed' ) ) );
+
+		$response = $this->rest()->handle_place( $this->request_with_body( array( 'payment_method' => 'cod' ) ) );
+
+		$this->assertSame( 402, $response->get_status() );
+		$this->assertArrayNotHasKey( 'order_id', $response->get_data() );
+	}
+
+	public function test_place_reports_the_post_payment_status() {
+		$this->with_options( array( 'idea89_checkout_native_methods' => array( 'bacs' ) ) );
+		$this->cart->empty                     = false;
+		$this->customer->data['billing_email'] = 'shopper@example.test';
+		Functions\when( 'wc_get_order' )->justReturn( new Idea89_Fake_WC_Order( array( 'status' => 'on-hold' ) ) );
+
+		$response = $this->rest()->handle_place( $this->request_with_body( array( 'payment_method' => 'bacs' ) ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'on-hold', $response->get_data()['status'] );
 	}
 }
