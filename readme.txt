@@ -5,7 +5,7 @@ Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.2.4
+Stable tag: 1.2.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -137,6 +137,11 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 
 == Changelog ==
 
+= 1.2.5 =
+* **The catalogue sync key is now part of setup.** Stores created in IDEA89 from 1 October 2026 need it before their catalogue will sync, so the setting is no longer marked optional. Create it in your IDEA89 dashboard under API & Domains and paste it under IDEA89 > Settings > Connection.
+* **A refused sync is reported on the settings page.** Catalogue sync runs in the background, so when IDEA89 turns it away because the sync key is missing or out of date, the IDEA89 settings page now shows IDEA89's explanation. The sync stops after the first refused page instead of working through the whole catalogue, and the message clears on the next successful sync.
+* **Test connection checks the sync key too.** It now asks IDEA89 whether a catalogue sync from this site would be accepted, with nothing written, and reports a missing or replaced sync key straight away.
+
 = 1.2.4 =
 * **Failed payments are never shown as a confirmed order.** In the in-chat native checkout, the payment gateway's result is now checked. If the gateway declines or fails the payment, the shopper sees the gateway's own message and no order confirmation.
 * **The in-chat checkout panel confirms only paid orders.** It now reports success only for orders that are processing, completed or on hold. A failed or cancelled order is reported as failed, and a pending payment leaves the shopper on your order page.
@@ -187,6 +192,9 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 * Initial release. Catalogue, category, page, coupon, FAQ and content sync; storefront chat widget with WooCommerce Store API add-to-cart; admin settings with Test Connection and Sync Now.
 
 == Upgrade Notice ==
+
+= 1.2.5 =
+Test connection now checks your catalogue sync key, and a sync refused because of the key is reported on the settings page instead of failing silently. New IDEA89 stores need the sync key before their catalogue will sync.
 
 = 1.2.4 =
 Checkout safety and security update: failed payments are never shown as confirmed orders, draft orders are hidden from order lookup, and new optional Catalogue sync key and Feed access key settings protect your catalogue and product feed. Nothing changes until you set the new keys.

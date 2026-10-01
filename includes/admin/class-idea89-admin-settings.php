@@ -237,8 +237,9 @@ class Idea89_Admin_Settings {
 				'type'              => 'string',
 				'sanitize_callback' => array( __CLASS__, 'sanitize_api_url' ),
 			),
-			// Optional. Secret, so kept out of the autoloaded cache like the
-			// API key. Sent only on catalog writes; see Idea89_Client::post().
+			// Secret, so kept out of the autoloaded cache like the API key.
+			// Sent only on catalog writes; see Idea89_Client::post(). Stores
+			// created since 2026-10-01 do not sync without it.
 			'idea89_sync_key'                     => array(
 				'type'              => 'string',
 				'sanitize_callback' => 'sanitize_text_field',
@@ -424,7 +425,7 @@ class Idea89_Admin_Settings {
 		$this->add_field( 'idea89_enabled', __( 'Enable assistant', 'idea89-ai-shopping-assistant' ), 'checkbox', 'idea89_general' );
 		$this->add_field( 'idea89_api_key', __( 'API key', 'idea89-ai-shopping-assistant' ), 'password', 'idea89_general' );
 		$this->add_field( 'idea89_api_url', __( 'API URL', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_general' );
-		$this->add_field( 'idea89_sync_key', __( 'Catalog sync key (optional)', 'idea89-ai-shopping-assistant' ), 'password', 'idea89_general' );
+		$this->add_field( 'idea89_sync_key', __( 'Catalogue sync key', 'idea89-ai-shopping-assistant' ), 'password', 'idea89_general' );
 
 		add_settings_section(
 			'idea89_appearance',
@@ -1281,6 +1282,25 @@ class Idea89_Admin_Settings {
 	}
 
 	/**
+	 * Says so when IDEA89 is refusing the catalogue sync over the sync key.
+	 * The sync runs in the background, so this is the only place the merchant
+	 * would otherwise learn why their catalogue is empty.
+	 *
+	 * @return void
+	 */
+	public function render_sync_key_rejection() {
+		$rejection = idea89_client()->get_sync_key_rejection();
+		if ( null === $rejection ) {
+			return;
+		}
+		printf(
+			'<div class="notice notice-error inline"><p><strong>%1$s</strong> %2$s</p></div>',
+			esc_html__( 'Your catalogue is not syncing.', 'idea89-ai-shopping-assistant' ),
+			esc_html( (string) $rejection['message'] )
+		);
+	}
+
+	/**
 	 * Renders the settings page.
 	 *
 	 * @return void
@@ -1293,6 +1313,7 @@ class Idea89_Admin_Settings {
 		<div class="wrap">
 			<h1><?php echo esc_html__( 'IDEA89 Assistant', 'idea89-ai-shopping-assistant' ); ?></h1>
 			<?php $this->render_brand_strip(); ?>
+			<?php $this->render_sync_key_rejection(); ?>
 			<form action="options.php" method="post">
 				<?php
 				settings_fields( self::OPTION_GROUP );

@@ -164,6 +164,15 @@ class Idea89_Catalog_Syncer {
 
 		$result['has_more'] = count( $products ) >= self::BATCH_SIZE;
 
+		// Refused over the sync key: every later page would be refused for the
+		// same reason, and this is not a sync to record as "last synced". The
+		// settings page shows the API's message.
+		if ( $result['failed'] > 0 && null !== $this->client->get_sync_key_rejection() ) {
+			$this->log( 'catalogue sync stopped on page ' . $page . ': sync key refused' );
+			$result['has_more'] = false;
+			return $result;
+		}
+
 		if ( ! $result['has_more'] ) {
 			update_option( 'idea89_last_full_sync_at', time(), false );
 		}

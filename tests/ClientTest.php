@@ -184,6 +184,7 @@ class ClientTest extends TestCase {
 	}
 
 	public function test_test_connection_reports_the_site_the_key_belongs_to() {
+		Functions\when( 'wp_remote_post' )->justReturn( array( 'response' => array( 'code' => 200 ), 'body' => '{"ok":true}' ) );
 		Functions\when( 'wp_remote_get' )->justReturn(
 			array(
 				'response' => array( 'code' => 200 ),
@@ -256,6 +257,7 @@ class ClientTest extends TestCase {
 	 * regression guard against silently pointing this back at /health.
 	 */
 	public function test_test_connection_pings_the_authenticated_stats_endpoint_with_a_valid_key() {
+		Functions\when( 'wp_remote_post' )->justReturn( array( 'response' => array( 'code' => 200 ), 'body' => '{"ok":true}' ) );
 		Functions\expect( 'wp_remote_get' )
 			->once()
 			->with(
@@ -331,6 +333,7 @@ class ClientTest extends TestCase {
 	}
 
 	public function test_test_connection_succeeds_on_200() {
+		Functions\when( 'wp_remote_post' )->justReturn( array( 'response' => array( 'code' => 200 ), 'body' => '{"ok":true}' ) );
 		Functions\when( 'wp_remote_get' )->justReturn(
 			array( 'response' => array( 'code' => 200 ), 'body' => '{"total":"0","in_stock":"0","last_sync":null}' )
 		);
@@ -439,5 +442,81 @@ class ClientTest extends TestCase {
 		$client = new Idea89_Client( new Idea89_Config() );
 
 		$this->assertFalse( $client->upsert_products( array( array( 'external_id' => '1' ) ) ) );
+	}
+
+	public function test_test_connection_reports_a_missing_sync_key_with_the_api_message() {
+		Functions\when( 'wp_remote_get' )->justReturn(
+			array( 'response' => array( 'code' => 200 ), 'body' => '{"total":"0"}' )
+		);
+		Functions\expect( 'wp_remote_post' )
+			->once()
+			->with( 'https://api.example.test/v1/catalog/verify', Mockery::any() )
+			->andReturn(
+				array(
+					'response' => array( 'code' => 401 ),
+					'body'     => '{"error":"sync_key_not_set","message":"Create one under API & Domains."}',
+				)
+			);
+
+		$result = ( new Idea89_Client( new Idea89_Config() ) )->test_connection();
+
+		$this->assertFalse( $result['ok'] );
+		$this->assertStringContainsString( 'Create one under API & Domains.', $result['error'] );
+	}
+
+	public function test_test_connection_still_passes_against_an_api_without_verify() {
+		Functions\when( 'wp_remote_get' )->justReturn( array( 'response' => array( 'code' => 200 ), 'body' => '{}' ) );
+		Functions\when( 'wp_remote_post' )->justReturn( array( 'response' => array( 'code' => 404 ), 'body' => '' ) );
+
+		$this->assertTrue( ( new Idea89_Client( new Idea89_Config() ) )->test_connection()['ok'] );
+	}
+
+	public function test_a_sync_key_refusal_is_stored_for_the_settings_page() {
+		Functions\when( 'wp_remote_post' )->justReturn(
+			array(
+				'response' => array( 'code' => 401 ),
+				'body'     => '{"error":"sync_key_required","message":"Paste the key into the plugin settings."}',
+			)
+		);
+		$stored = null;
+		Functions\when( 'update_option' )->alias(
+			function ( $name, $value ) use ( &$stored ) {
+				if ( 'idea89_sync_key_rejection' === $name ) {
+					$stored = $value;
+				}
+				return true;
+			}
+		);
+
+		$this->assertFalse( ( new Idea89_Client( new Idea89_Config() ) )->upsert_products( array( array( 'external_id' => '1' ) ) ) );
+		$this->assertSame( 'Paste the key into the plugin settings.', $stored['message'] );
+	}
+
+	public function test_other_failures_are_not_recorded_as_a_sync_key_refusal() {
+		Functions\when( 'wp_remote_post' )->justReturn( array( 'response' => array( 'code' => 401 ), 'body' => '{"error":"invalid_api_key"}' ) );
+		Functions\expect( 'update_option' )->never();
+
+		$this->assertFalse( ( new Idea89_Client( new Idea89_Config() ) )->upsert_products( array( array( 'external_id' => '1' ) ) ) );
+	}
+
+	public function test_an_accepted_catalogue_write_clears_a_stored_refusal() {
+		Functions\when( 'get_option' )->alias(
+			function ( $name, $default = '' ) {
+				if ( 'idea89_api_key' === $name ) {
+					return 'sk_test_key';
+				}
+				if ( 'idea89_api_url' === $name ) {
+					return 'https://api.example.test';
+				}
+				if ( 'idea89_sync_key_rejection' === $name ) {
+					return array( 'message' => 'old', 'at' => 1 );
+				}
+				return $default;
+			}
+		);
+		Functions\when( 'wp_remote_post' )->justReturn( array( 'response' => array( 'code' => 200 ), 'body' => '{}' ) );
+		Functions\expect( 'delete_option' )->once()->with( 'idea89_sync_key_rejection' );
+
+		$this->assertTrue( ( new Idea89_Client( new Idea89_Config() ) )->upsert_products( array( array( 'external_id' => '1' ) ) ) );
 	}
 }

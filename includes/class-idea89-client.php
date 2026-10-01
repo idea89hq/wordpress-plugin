@@ -23,6 +23,21 @@ class Idea89_Client {
 	const BATCH_TIMEOUT = 60;
 
 	/**
+	 * Option holding the last catalogue write refused over the sync key:
+	 * array{message: string, at: int}. Syncs run in Action Scheduler, so
+	 * "Sync now" cannot return the refusal; the settings page reads this
+	 * instead. Cleared by the next accepted catalogue write.
+	 */
+	const SYNC_KEY_REJECTION_OPTION = 'idea89_sync_key_rejection';
+
+	/**
+	 * API error codes that mean "the catalogue sync key is the problem".
+	 *
+	 * @var string[]
+	 */
+	const SYNC_KEY_ERRORS = array( 'sync_key_not_set', 'sync_key_required', 'invalid_sync_key' );
+
+	/**
 	 * Configuration reader.
 	 *
 	 * @var Idea89_Config
@@ -125,6 +140,43 @@ class Idea89_Client {
 	}
 
 	/**
+	 * The last catalogue write refused over the sync key, or null.
+	 *
+	 * @return array{message: string, at: int}|null
+	 */
+	public function get_sync_key_rejection() {
+		$value = get_option( self::SYNC_KEY_REJECTION_OPTION, null );
+		return is_array( $value ) && isset( $value['message'] ) ? $value : null;
+	}
+
+	/**
+	 * The API's merchant-facing message when a response is a sync-key
+	 * refusal, else null.
+	 *
+	 * @param int    $code HTTP status.
+	 * @param string $body Response body.
+	 * @return string|null
+	 */
+	public static function sync_key_error_message( $code, $body ) {
+		if ( 401 !== (int) $code ) {
+			return null;
+		}
+		$data = json_decode( (string) $body, true );
+		if ( ! is_array( $data ) || ! isset( $data['error'] ) || ! in_array( $data['error'], self::SYNC_KEY_ERRORS, true ) ) {
+			return null;
+		}
+		$message = isset( $data['message'] ) && is_string( $data['message'] ) ? trim( $data['message'] ) : '';
+		if ( '' !== $message ) {
+			return $message;
+		}
+		return sprintf(
+			/* translators: %s: API error code */
+			__( 'Catalogue sync was refused (%s). Check the Catalogue sync key setting.', 'idea89-ai-shopping-assistant' ),
+			$data['error']
+		);
+	}
+
+	/**
 	 * POSTs a JSON payload and reports whether it was accepted.
 	 *
 	 * @param string $path    Path beneath the API base, e.g. /v1/catalog/upsert.
@@ -171,8 +223,24 @@ class Idea89_Client {
 
 		$code = (int) wp_remote_retrieve_response_code( $response );
 		if ( $code < 200 || $code >= 300 ) {
-			$this->log( $path . ' failed: HTTP ' . $code . ' ' . substr( (string) wp_remote_retrieve_body( $response ), 0, 500 ) );
+			$response_body = (string) wp_remote_retrieve_body( $response );
+			$this->log( $path . ' failed: HTTP ' . $code . ' ' . substr( $response_body, 0, 500 ) );
+			$rejection = self::sync_key_error_message( $code, $response_body );
+			if ( null !== $rejection ) {
+				update_option(
+					self::SYNC_KEY_REJECTION_OPTION,
+					array(
+						'message' => $rejection,
+						'at'      => time(),
+					),
+					false
+				);
+			}
 			return false;
+		}
+
+		if ( 0 === strpos( $path, '/v1/catalog/' ) && null !== $this->get_sync_key_rejection() ) {
+			delete_option( self::SYNC_KEY_REJECTION_OPTION );
 		}
 
 		return true;
@@ -417,11 +485,19 @@ class Idea89_Client {
 		$code = (int) wp_remote_retrieve_response_code( $response );
 
 		if ( 200 === $code ) {
-			$body = json_decode( wp_remote_retrieve_body( $response ), true );
+			$body  = json_decode( wp_remote_retrieve_body( $response ), true );
+			$site  = is_array( $body ) && isset( $body['site'] ) ? (string) $body['site'] : '';
+			$check = $this->verify_catalog_access();
+			if ( '' !== $check ) {
+				return array(
+					'ok'    => false,
+					'error' => $check,
+				);
+			}
 			return array(
 				'ok'    => true,
 				'error' => '',
-				'site'  => is_array( $body ) && isset( $body['site'] ) ? (string) $body['site'] : '',
+				'site'  => $site,
 			);
 		}
 
@@ -461,6 +537,65 @@ class Idea89_Client {
 				__( 'API returned HTTP %d. Check your API URL and key.', 'idea89-ai-shopping-assistant' ),
 				$code
 			),
+		);
+	}
+
+	/**
+	 * Asks the API whether a catalogue sync from this site would be accepted:
+	 * the same checks a real sync gets, sync key included, with nothing
+	 * written. A missing key otherwise only shows up as an empty catalogue,
+	 * because the sync itself runs in the background.
+	 *
+	 * @return string Empty when accepted, else a message for the merchant.
+	 */
+	private function verify_catalog_access() {
+		$headers  = $this->headers();
+		$sync_key = $this->config->get_sync_key();
+		if ( '' !== $sync_key ) {
+			$headers['X-IDEA89-Sync-Key'] = $sync_key;
+		}
+
+		$response = wp_remote_post(
+			$this->config->get_api_url() . '/v1/catalog/verify',
+			array(
+				'timeout' => self::TIMEOUT,
+				'headers' => $headers,
+				'body'    => '{}',
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			$this->log( 'catalogue access check failed: ' . $response->get_error_message() );
+			return sprintf(
+				/* translators: %s: error message */
+				__( 'Connected, but the catalogue check failed: %s', 'idea89-ai-shopping-assistant' ),
+				$response->get_error_message()
+			);
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		// 404: an API older than this plugin; the connection check already passed.
+		if ( 200 === $code || 404 === $code ) {
+			if ( 200 === $code && null !== $this->get_sync_key_rejection() ) {
+				delete_option( self::SYNC_KEY_REJECTION_OPTION );
+			}
+			return '';
+		}
+
+		$body = (string) wp_remote_retrieve_body( $response );
+		$this->log( 'catalogue access check: HTTP ' . $code . ' ' . substr( $body, 0, 500 ) );
+		$rejection = self::sync_key_error_message( $code, $body );
+		if ( null !== $rejection ) {
+			return sprintf(
+				/* translators: %s: the API's explanation, e.g. how to create the key */
+				__( 'Connected, but catalogue sync will be refused: %s', 'idea89-ai-shopping-assistant' ),
+				$rejection
+			);
+		}
+		return sprintf(
+			/* translators: %d: HTTP status code */
+			__( 'Connected, but the API refused catalogue access (HTTP %d). Check your API key.', 'idea89-ai-shopping-assistant' ),
+			$code
 		);
 	}
 }

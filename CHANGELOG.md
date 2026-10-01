@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.5] - 2026-10-01
+
+### Changed
+- **Catalogue sync key is part of setup**, no longer labelled optional: stores
+  created in IDEA89 from 2026-10-01 do not sync without it.
+
+### Fixed
+- **A refused sync is reported, not swallowed.** A 401 with
+  `sync_key_not_set`, `sync_key_required` or `invalid_sync_key` on a
+  catalogue write is stored in `idea89_sync_key_rejection` (not autoloaded,
+  removed on uninstall) and shown on the settings page; the next accepted
+  catalogue write clears it. `sync_page` ends the page chain on such a
+  refusal and does not record `idea89_last_full_sync_at`.
+- **Test connection checks catalogue access.** After `/v1/catalog/stats` it
+  posts to `/v1/catalog/verify` with the sync key, and reports the API's
+  message when catalogue writes would be refused. A 404 (an older API) still
+  passes.
+
 ## [1.2.4] - 2026-10-01
 
 ### Fixed

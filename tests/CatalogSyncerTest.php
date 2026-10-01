@@ -14,8 +14,13 @@ require_once IDEA89_PLUGIN_DIR . 'includes/sync/class-idea89-catalog-syncer.php'
 class Spy_Client extends Idea89_Client {
 	public $batches      = array();
 	public $return_value = true;
+	public $rejection    = null;
 
 	public function __construct() {}
+
+	public function get_sync_key_rejection() {
+		return $this->rejection;
+	}
 
 	public function upsert_products( array $products ) {
 		$this->batches[] = $products;
@@ -116,6 +121,31 @@ class CatalogSyncerTest extends TestCase {
 
 		$this->assertSame( 0, $result['synced'] );
 		$this->assertSame( 1, $result['failed'] );
+	}
+
+	public function test_a_sync_key_refusal_stops_the_page_chain_and_is_not_recorded_as_a_sync() {
+		Functions\when( 'wc_get_products' )->justReturn(
+			array_map(
+				function ( $i ) {
+					return new Fake_WC_Product( array( 'id' => $i ) );
+				},
+				range( 1, 100 )
+			)
+		);
+		Functions\expect( 'update_option' )->never();
+
+		$client               = new Spy_Client();
+		$client->return_value = false;
+		$client->rejection    = array(
+			'message' => 'Paste the key into the plugin settings.',
+			'at'      => 1,
+		);
+		$syncer               = new Idea89_Catalog_Syncer( new Idea89_Config(), $client, new Idea89_Product_Serializer() );
+		$result               = $syncer->sync_page( 1 );
+
+		$this->assertSame( 100, $result['failed'] );
+		// A full page would normally chain to page 2; every later page would be refused too.
+		$this->assertFalse( $result['has_more'] );
 	}
 
 	public function test_one_bad_product_is_skipped_and_the_batch_continues() {

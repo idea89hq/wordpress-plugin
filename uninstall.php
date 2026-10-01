@@ -12,6 +12,7 @@ $idea89_options = array(
 	'idea89_api_key',
 	'idea89_api_url',
 	'idea89_sync_key',
+	'idea89_sync_key_rejection',
 	'idea89_assistant_name',
 	'idea89_store_context',
 	'idea89_widget_position',
