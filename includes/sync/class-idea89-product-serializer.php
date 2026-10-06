@@ -106,38 +106,46 @@ class Idea89_Product_Serializer {
 		$rating     = (float) $product->get_average_rating();
 
 		return array(
-			'external_id'     => (string) $product_id,
-			'sku'             => (string) $product->get_sku(),
+			'external_id'        => (string) $product_id,
+			'sku'                => (string) $product->get_sku(),
 			// Through the same guard every other lane uses. The API requires a
 			// non-empty name (1-500 chars) and a blank one is realistic — CSV
 			// imports and programmatic creation both produce products with no
 			// title — so it gets a generated fallback instead of 400ing all 100.
-			'name'            => Idea89_Content_Syncer::safe_title( $product->get_name(), 'Product ' . $product_id ),
-			'description'     => Idea89_Content_Syncer::truncate( $description, self::MAX_DESCRIPTION ),
-			'price'           => $this->price_or_null( $product->get_price() ),
-			'currency'        => get_woocommerce_currency(),
-			'in_stock'        => (bool) $product->is_in_stock(),
-			'stock_qty'       => null === $product->get_stock_quantity() ? null : (int) $product->get_stock_quantity(),
+			'name'               => Idea89_Content_Syncer::safe_title( $product->get_name(), 'Product ' . $product_id ),
+			'description'        => Idea89_Content_Syncer::truncate( $description, self::MAX_DESCRIPTION ),
+			'price'              => $this->price_or_null( $product->get_price() ),
+			'currency'           => get_woocommerce_currency(),
+			'in_stock'           => (bool) $product->is_in_stock(),
+			'stock_qty'          => null === $product->get_stock_quantity() ? null : (int) $product->get_stock_quantity(),
 			// safe_url(), not a bare cast: get_permalink() returns false on
 			// failure, and a CDN or image-offload plugin filtering these can hand
 			// back a protocol-relative "//cdn.example/..." that fails the API's
 			// .url(). Both schema fields explicitly allow "", so an unusable URL
 			// degrades to empty rather than failing the batch.
-			'url'             => (string) Idea89_Content_Syncer::safe_url( $product->get_permalink() ),
-			'image_url'       => $this->image_url( $product ),
-			'category_path'   => $categories['path'],
-			'category_names'  => $categories['names'],
-			'attributes'      => $this->attributes( $product ),
-			'product_type'    => self::map_product_type( $product->get_type() ),
-			'variants'        => $this->variants( $product ),
-			'avg_rating'      => $rating > 0 ? $rating : null,
-			'review_count'    => (int) $product->get_review_count(),
-			'review_snippets' => $this->review_snippets( $product_id ),
-			'is_featured'     => (bool) $product->is_featured(),
-			'is_new'          => $this->is_new( $product ),
-			'bestseller_rank' => null,
-			'sale_price'      => $product->is_on_sale() ? $this->price_or_null( $product->get_sale_price() ) : null,
-			'is_on_sale'      => (bool) $product->is_on_sale(),
+			'url'                => (string) Idea89_Content_Syncer::safe_url( $product->get_permalink() ),
+			'image_url'          => $this->image_url( $product ),
+			'category_path'      => $categories['path'],
+			'category_names'     => $categories['names'],
+			'attributes'         => $this->attributes( $product ),
+			// Schema 2 (plugin 1.3.0): labels, types and flags, the price's tax
+			// basis, the short description on its own and category paths. An
+			// IDEA89 API that predates schema 2 ignores these keys.
+			'attribute_list'     => $this->attribute_list( $product ),
+			'short_description'  => $this->short_description( $product ),
+			'price_includes_tax' => function_exists( 'wc_prices_include_tax' ) ? (bool) wc_prices_include_tax() : null,
+			'tax_rate'           => $this->tax_rate( $product ),
+			'category_paths'     => $categories['paths'],
+			'product_type'       => self::map_product_type( $product->get_type() ),
+			'variants'           => $this->variants( $product ),
+			'avg_rating'         => $rating > 0 ? $rating : null,
+			'review_count'       => (int) $product->get_review_count(),
+			'review_snippets'    => $this->review_snippets( $product_id ),
+			'is_featured'        => (bool) $product->is_featured(),
+			'is_new'             => $this->is_new( $product ),
+			'bestseller_rank'    => null,
+			'sale_price'         => $product->is_on_sale() ? $this->price_or_null( $product->get_sale_price() ) : null,
+			'is_on_sale'         => (bool) $product->is_on_sale(),
 		);
 	}
 
@@ -175,6 +183,7 @@ class Idea89_Product_Serializer {
 			return array(
 				'names' => array(),
 				'path'  => '',
+				'paths' => array(),
 			);
 		}
 
@@ -220,19 +229,56 @@ class Idea89_Product_Serializer {
 			$path[] = $term->name;
 		}
 
+		// Schema 2: each category as its own path of names, root first.
+		$paths = array();
+		foreach ( $terms as $term ) {
+			if ( ! isset( $term->name, $term->term_id ) ) {
+				continue;
+			}
+			$chain = array();
+			foreach ( array_reverse( (array) get_ancestors( $term->term_id, 'product_cat' ) ) as $ancestor_id ) {
+				$ancestor = function_exists( 'get_term' ) ? get_term( $ancestor_id, 'product_cat' ) : null;
+				if ( is_object( $ancestor ) && isset( $ancestor->name ) ) {
+					$chain[] = $ancestor->name;
+				}
+			}
+			$chain[] = $term->name;
+			$paths[] = implode( ' > ', $chain );
+		}
+
 		return array(
 			'names' => array_slice( array_values( array_unique( $names ) ), 0, self::MAX_CATEGORY_NAMES ),
 			'path'  => implode( ' > ', $path ),
+			'paths' => array_slice( array_values( array_unique( $paths ) ), 0, 50 ),
 		);
 	}
 
 	/**
 	 * Flattens product attributes to a name => value map.
 	 *
+	 * A global (taxonomy, `pa_*`) attribute's get_options() holds TERM IDS,
+	 * not names: sending them gave the assistant "12, 15" for a colour. Their
+	 * values are the term names, read with wc_get_product_terms(). A local
+	 * attribute's options are the text the merchant typed.
+	 *
 	 * @param object $product Product.
 	 * @return array<string, string>
 	 */
 	private function attributes( $product ) {
+		$out = array();
+		foreach ( $this->attribute_values( $product ) as $name => $entry ) {
+			$out[ $name ] = implode( ', ', $entry['values'] );
+		}
+		return $out;
+	}
+
+	/**
+	 * Each product attribute with its display values, keyed by attribute name.
+	 *
+	 * @param object $product Product.
+	 * @return array<string, array{attribute: object|null, values: string[]}>
+	 */
+	private function attribute_values( $product ) {
 		$out        = array();
 		$attributes = $product->get_attributes();
 		if ( ! is_array( $attributes ) ) {
@@ -241,14 +287,150 @@ class Idea89_Product_Serializer {
 
 		foreach ( $attributes as $name => $attribute ) {
 			if ( is_object( $attribute ) && method_exists( $attribute, 'get_options' ) ) {
-				$options               = $attribute->get_options();
-				$out[ (string) $name ] = is_array( $options ) ? implode( ', ', $options ) : (string) $options;
-			} elseif ( is_scalar( $attribute ) ) {
-				$out[ (string) $name ] = (string) $attribute;
+				$taxonomy = method_exists( $attribute, 'is_taxonomy' ) && $attribute->is_taxonomy();
+				if ( $taxonomy && function_exists( 'wc_get_product_terms' ) ) {
+					$terms  = wc_get_product_terms( (int) $product->get_id(), (string) $attribute->get_name(), array( 'fields' => 'names' ) );
+					$values = is_array( $terms ) ? $terms : array();
+				} else {
+					$options = $attribute->get_options();
+					$values  = is_array( $options ) ? $options : array( $options );
+				}
+				$values = array_values(
+					array_filter(
+						array_map( 'strval', $values ),
+						static function ( $v ) {
+							return '' !== trim( $v );
+						}
+					)
+				);
+				if ( ! empty( $values ) ) {
+					$out[ (string) $name ] = array(
+						'attribute' => $attribute,
+						'values'    => $values,
+					);
+				}
+			} elseif ( is_scalar( $attribute ) && '' !== (string) $attribute ) {
+				$out[ (string) $name ] = array(
+					'attribute' => null,
+					'values'    => array( (string) $attribute ),
+				);
 			}
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Schema-2 attribute list: every product attribute with its label (as the
+	 * Attributes screen or the product names it), its values as term names
+	 * or the text typed, a type, and its flags: "Visible on the product page"
+	 * and, for a global attribute, filterable (global attributes are what the
+	 * layered-navigation filters use). The product's weight and dimensions
+	 * are added with the store's units when set.
+	 *
+	 * @param object $product Product.
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function attribute_list( $product ) {
+		$out = array();
+		foreach ( $this->attribute_values( $product ) as $name => $entry ) {
+			$attribute = $entry['attribute'];
+			$taxonomy  = is_object( $attribute ) && method_exists( $attribute, 'is_taxonomy' ) && $attribute->is_taxonomy();
+			$values    = $entry['values'];
+			$out[]     = array(
+				'code'       => (string) $name,
+				'label'      => $this->attribute_label( is_object( $attribute ) && method_exists( $attribute, 'get_name' ) ? (string) $attribute->get_name() : (string) $name, $product ),
+				'value'      => count( $values ) > 1 ? $values : $values[0],
+				'type'       => count( $values ) > 1 ? 'multiselect' : ( $taxonomy ? 'select' : 'text' ),
+				'filterable' => $taxonomy,
+				'searchable' => null,
+				'visible'    => is_object( $attribute ) && method_exists( $attribute, 'get_visible' ) ? (bool) $attribute->get_visible() : true,
+			);
+		}
+		foreach ( $this->measures( $product ) as $measure ) {
+			$out[] = $measure;
+		}
+		return $out;
+	}
+
+	/**
+	 * Weight and dimensions with the store's units, as attributes.
+	 *
+	 * @param object $product Product or variation.
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function measures( $product ) {
+		$out    = array();
+		$weight = method_exists( $product, 'get_weight' ) ? (string) $product->get_weight() : '';
+		if ( '' !== $weight && is_numeric( $weight ) ) {
+			$unit  = (string) get_option( 'woocommerce_weight_unit', '' );
+			$out[] = array(
+				'code'       => 'weight',
+				'label'      => 'Weight',
+				'value'      => $weight,
+				'type'       => 'number',
+				'unit'       => '' !== $unit ? $unit : null,
+				'filterable' => false,
+				'searchable' => null,
+				'visible'    => true,
+			);
+		}
+		foreach ( array(
+			'length' => 'Length',
+			'width'  => 'Width',
+			'height' => 'Height',
+		) as $key => $label ) {
+			$getter = 'get_' . $key;
+			$value  = method_exists( $product, $getter ) ? (string) $product->$getter() : '';
+			if ( '' !== $value && is_numeric( $value ) ) {
+				$unit  = (string) get_option( 'woocommerce_dimension_unit', '' );
+				$out[] = array(
+					'code'       => $key,
+					'label'      => $label,
+					'value'      => $value,
+					'type'       => 'number',
+					'unit'       => '' !== $unit ? $unit : null,
+					'filterable' => false,
+					'searchable' => null,
+					'visible'    => true,
+				);
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The short description on its own, tags stripped, or null.
+	 *
+	 * @param object $product Product.
+	 * @return string|null
+	 */
+	private function short_description( $product ) {
+		$text = trim( preg_replace( '/\s+/', ' ', wp_strip_all_tags( (string) $product->get_short_description() ) ) );
+		return '' === $text ? null : Idea89_Content_Syncer::truncate( $text, 5000 );
+	}
+
+	/**
+	 * The tax rate (percent) of the product's tax class at the shop's base
+	 * location, or null when WooCommerce cannot say.
+	 *
+	 * @param object $product Product.
+	 * @return float|null
+	 */
+	private function tax_rate( $product ) {
+		if ( ! class_exists( 'WC_Tax' ) || ! function_exists( 'wc_tax_enabled' ) || ! wc_tax_enabled() ) {
+			return null;
+		}
+		$class = method_exists( $product, 'get_tax_class' ) ? (string) $product->get_tax_class() : '';
+		$rates = WC_Tax::get_base_tax_rates( $class );
+		if ( ! is_array( $rates ) ) {
+			return null;
+		}
+		$total = 0.0;
+		foreach ( $rates as $rate ) {
+			$total += isset( $rate['rate'] ) ? (float) $rate['rate'] : 0.0;
+		}
+		return $total;
 	}
 
 	/**
@@ -298,13 +480,48 @@ class Idea89_Product_Serializer {
 			$wire_out    = empty( $wire ) ? new stdClass() : $wire;
 			$display_out = empty( $display ) ? new stdClass() : $display;
 
-			$out[] = array(
+			// The variation's own product, for its stock quantity and its
+			// price on the same tax basis as the parent's (display_price
+			// follows the shop's tax DISPLAY setting, the parent's price does not).
+			$variation_product = isset( $variation['variation_id'] ) && function_exists( 'wc_get_product' ) ? wc_get_product( (int) $variation['variation_id'] ) : false;
+			$raw_price         = is_object( $variation_product ) && method_exists( $variation_product, 'get_price' ) ? $variation_product->get_price() : null;
+			$item              = array(
 				'sku'              => isset( $variation['sku'] ) ? (string) $variation['sku'] : '',
 				'in_stock'         => ! empty( $variation['is_in_stock'] ),
-				'price'            => $this->price_or_null( isset( $variation['display_price'] ) ? $variation['display_price'] : null ),
+				'price'            => $this->price_or_null( null !== $raw_price && '' !== $raw_price ? $raw_price : ( isset( $variation['display_price'] ) ? $variation['display_price'] : null ) ),
 				'options'          => $display_out,
 				'super_attributes' => $wire_out,
 			);
+			if ( is_object( $variation_product ) ) {
+				$qty               = method_exists( $variation_product, 'get_stock_quantity' ) ? $variation_product->get_stock_quantity() : null;
+				$item['stock_qty'] = null === $qty ? null : (int) $qty;
+				if ( method_exists( $variation_product, 'get_name' ) ) {
+					$item['name'] = (string) $variation_product->get_name();
+				}
+				// The variation's own values: its options, and weight or
+				// dimensions where it sets its own.
+				$own = array();
+				foreach ( (array) $display as $label => $value ) {
+					if ( '' !== (string) $value ) {
+						$own[] = array(
+							'code'       => sanitize_title( (string) $label ),
+							'label'      => (string) $label,
+							'value'      => (string) $value,
+							'type'       => 'select',
+							'filterable' => null,
+							'searchable' => null,
+							'visible'    => true,
+						);
+					}
+				}
+				foreach ( $this->measures( $variation_product ) as $measure ) {
+					$own[] = $measure;
+				}
+				if ( ! empty( $own ) ) {
+					$item['attribute_list'] = $own;
+				}
+			}
+			$out[] = $item;
 		}
 
 		// The API caps variants at 200. A product with three attributes of ten

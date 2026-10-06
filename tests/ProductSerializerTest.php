@@ -35,6 +35,12 @@ class ProductSerializerTest extends TestCase {
 		Functions\when( 'taxonomy_exists' )->justReturn( false );
 		Functions\when( 'get_term_by' )->justReturn( false );
 		Functions\when( 'is_wp_error' )->justReturn( false );
+		// Schema-2 lookups (plugin 1.3.0).
+		Functions\when( 'wc_prices_include_tax' )->justReturn( false );
+		Functions\when( 'wc_tax_enabled' )->justReturn( false );
+		Functions\when( 'get_option' )->justReturn( '' );
+		Functions\when( 'get_term' )->justReturn( null );
+		Functions\when( 'sanitize_title' )->alias( function ( $t ) { return strtolower( preg_replace( '/[^a-z0-9]+/i', '-', $t ) ); } );
 	}
 
 	protected function tearDown(): void {

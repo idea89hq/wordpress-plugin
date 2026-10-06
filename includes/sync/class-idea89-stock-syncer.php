@@ -87,17 +87,27 @@ class Idea89_Stock_Syncer {
 				$this->log( 'stock sync skipped — parent ' . $parent_id . ' not found for variation ' . $product->get_id() );
 				return false;
 			}
-			$product = $parent;
+			// Schema 2: the variation's own stock, inside its parent's row.
+			$variation_item = array(
+				'external_id'        => (string) $product->get_id(),
+				'parent_external_id' => (string) $parent_id,
+				'sku'                => (string) $product->get_sku(),
+				'in_stock'           => (bool) $product->is_in_stock(),
+				'stock_qty'          => null === $product->get_stock_quantity() ? null : (int) $product->get_stock_quantity(),
+			);
+			$product        = $parent;
 		}
 
-		return $this->client->upsert_stock(
+		$items = array(
 			array(
-				array(
-					'external_id' => (string) $product->get_id(),
-					'in_stock'    => (bool) $product->is_in_stock(),
-					'stock_qty'   => null === $product->get_stock_quantity() ? null : (int) $product->get_stock_quantity(),
-				),
-			)
+				'external_id' => (string) $product->get_id(),
+				'in_stock'    => (bool) $product->is_in_stock(),
+				'stock_qty'   => null === $product->get_stock_quantity() ? null : (int) $product->get_stock_quantity(),
+			),
 		);
+		if ( isset( $variation_item ) && '' !== $variation_item['sku'] ) {
+			$items[] = $variation_item;
+		}
+		return $this->client->upsert_stock( $items );
 	}
 }

@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-06
+
+### Fixed
+- **Global (`pa_*`) attributes are sent as term names**, not term ids: the
+  flat map carried "12, 15" for a colour.
+
+### Added
+- **Catalogue schema 2**: `schema_version` and `platform` on the batch, and
+  per product an `attribute_list` (label from `wc_attribute_label()`, term
+  names or typed text, `select`/`multiselect`/`text`/`number`, `visible` from
+  "Visible on the product page", `filterable` for global attributes), weight
+  and dimensions with the shop's units, `price_includes_tax`
+  (`wc_prices_include_tax()`), `tax_rate` (base-location rates of the tax
+  class), `short_description`, `category_paths`.
+- **Variations**: `stock_qty`, `name`, their own `attribute_list` (options,
+  weight, dimensions), and `price` read from the variation (same basis as
+  the parent) instead of `display_price`.
+- **Variation stock** is also sent as `{parent_external_id, sku}`, so the API
+  updates the variation inside its parent; the parent line is unchanged.
+
+### Notes
+- Core WooCommerce has no bulk pricing; nothing is sent for it.
+- An IDEA89 API that predates schema 2 ignores the new keys.
+
 ## [1.2.5] - 2026-10-01
 
 ### Changed

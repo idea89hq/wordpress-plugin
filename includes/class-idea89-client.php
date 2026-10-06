@@ -284,7 +284,17 @@ class Idea89_Client {
 		if ( empty( $products ) ) {
 			return true;
 		}
-		return $this->post( '/v1/catalog/upsert', array( 'products' => $products ), self::BATCH_TIMEOUT );
+		// Schema 2: an IDEA89 API that predates it ignores the version, the
+		// platform and the schema-2 product keys.
+		return $this->post(
+			'/v1/catalog/upsert',
+			array(
+				'schema_version' => 2,
+				'platform'       => 'woocommerce',
+				'products'       => $products,
+			),
+			self::BATCH_TIMEOUT
+		);
 	}
 
 	/**

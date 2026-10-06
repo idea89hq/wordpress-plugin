@@ -226,6 +226,21 @@ class ClientTest extends TestCase {
 		$this->assertTrue( $client->upsert_products( array( array( 'external_id' => '1' ) ) ) );
 	}
 
+	public function test_upsert_products_marks_the_payload_schema_2() {
+		$body = null;
+		Functions\when( 'wp_remote_post' )->alias(
+			function ( $url, $args ) use ( &$body ) {
+				$body = json_decode( $args['body'], true );
+				return array( 'response' => array( 'code' => 200 ), 'body' => '{}' );
+			}
+		);
+		$client = new Idea89_Client( new Idea89_Config() );
+		$this->assertTrue( $client->upsert_products( array( array( 'external_id' => '1' ) ) ) );
+		$this->assertSame( 2, $body['schema_version'] );
+		$this->assertSame( 'woocommerce', $body['platform'] );
+		$this->assertSame( '1', $body['products'][0]['external_id'] );
+	}
+
 	public function test_non_2xx_response_returns_false() {
 		Functions\when( 'wp_remote_post' )->justReturn(
 			array( 'response' => array( 'code' => 500 ), 'body' => 'boom' )

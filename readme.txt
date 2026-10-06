@@ -5,7 +5,7 @@ Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.2.5
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -136,6 +136,13 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 3. Content Sync screen showing auto-detected FAQ sources.
 
 == Changelog ==
+
+= 1.3.0 =
+* **Global attributes are sent by name.** A global attribute (one created under Products > Attributes, such as Colour) was sent as its term ids, so the assistant read "12, 15" where your page shows "Sage, Rust". It now sends the term names.
+* **Attributes with their labels and settings.** Each attribute is sent with the label your shop shows, its values, whether it is visible on the product page, and whether it is a global attribute your layered-navigation filters use, so the assistant can filter on it and confirm a shopper's requirement from it. Weight and dimensions go with your shop's units.
+* **Tax basis, short description and category paths.** Whether your prices are entered with tax, the tax rate for the product's tax class at your shop's base location, the short description on its own, and each category with its parent categories.
+* **Variations carry their own data.** Each variation's stock quantity, its own values (options, weight and dimensions where it sets its own), and a price on the same tax basis as the parent (previously the displayed price, which follows the shop's tax display setting). A variation's stock change is also sent as the variation's own stock.
+* **Compatibility.** These are additions to the catalogue sync; an IDEA89 API that predates them ignores them. WooCommerce itself has no quantity (bulk) pricing, so none is sent.
 
 = 1.2.5 =
 * **The catalogue sync key is now part of setup.** Stores created in IDEA89 from 1 October 2026 need it before their catalogue will sync, so the setting is no longer marked optional. Create it in your IDEA89 dashboard under API & Domains and paste it under IDEA89 > Settings > Connection.

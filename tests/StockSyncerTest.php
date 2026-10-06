@@ -103,6 +103,11 @@ class StockSyncerTest extends TestCase {
 		// The catalogue is keyed on the parent id — the variation's own id
 		// (55) must never appear as the external_id sent to the API.
 		$this->assertSame( '42', $client->calls[0][0]['external_id'] );
+		// Schema 2: the variation's own stock, addressed inside its parent.
+		$this->assertSame(
+			array( 'external_id' => '55', 'parent_external_id' => '42', 'sku' => 'SKU-1', 'in_stock' => true, 'stock_qty' => 5 ),
+			$client->calls[0][1]
+		);
 	}
 
 	public function test_an_orphaned_variation_is_a_no_op_and_makes_no_client_call() {
