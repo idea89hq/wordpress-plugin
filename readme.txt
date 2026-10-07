@@ -5,7 +5,7 @@ Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.3.0
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -137,6 +137,13 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 
 == Changelog ==
 
+= 1.4.0 =
+* **Signed-in shoppers are recognised.** The chat never asked this plugin who was signed in, so personalization, a signed-in shopper's recent orders and "When signed in" quick actions did not work on WooCommerce. They do now, including on a WordPress install in a subfolder.
+* **The in-chat checkout starts on the right country.** The delivery form lists countries by name and starts on the customer's shipping country, or your shop's base country, instead of asking for a two-letter code.
+* **Brand colour moved to the IDEA89 dashboard.** The plugin's Brand colour field silently overrode the colour picked in the dashboard. Set it in the dashboard (Settings > Widget), with the theme, fonts and a live preview. A colour you had set here is sent to IDEA89 once, and used only if the dashboard is still on the theme's own colours.
+* **Store context moved to the IDEA89 dashboard.** It was saved in WordPress but never reached the assistant. Describe your store in the dashboard (Settings > AI & Knowledge). Text you entered here is sent to IDEA89 once and used if the dashboard field is empty.
+* The Personalization help text now says where the signing secret comes from: create it in the IDEA89 dashboard.
+
 = 1.3.0 =
 * **Global attributes are sent by name.** A global attribute (one created under Products > Attributes, such as Colour) was sent as its term ids, so the assistant read "12, 15" where your page shows "Sage, Rust". It now sends the term names.
 * **Attributes with their labels and settings.** Each attribute is sent with the label your shop shows, its values, whether it is visible on the product page, and whether it is a global attribute your layered-navigation filters use, so the assistant can filter on it and confirm a shopper's requirement from it. Weight and dimensions go with your shop's units.
@@ -199,6 +206,9 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 * Initial release. Catalogue, category, page, coupon, FAQ and content sync; storefront chat widget with WooCommerce Store API add-to-cart; admin settings with Test Connection and Sync Now.
 
 == Upgrade Notice ==
+
+= 1.4.0 =
+Signed-in shoppers are now recognised on WooCommerce. Brand colour and store context move to your IDEA89 dashboard; anything you set here is handed over automatically.
 
 = 1.2.5 =
 Test connection now checks your catalogue sync key, and a sync refused because of the key is reported on the settings page instead of failing silently. New IDEA89 stores need the sync key before their catalogue will sync.

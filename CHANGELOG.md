@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.4.0] - 2026-10-07
+
+### Added
+- **The in-chat checkout starts on the right country.** The checkout
+  context now sends `default_country`: the customer's shipping country (a
+  signed-in customer's address, or what WooCommerce's "Default customer
+  location" gives a guest), else the shop's base country. The assistant's
+  delivery form now lists countries by name and starts on it, instead of
+  asking shoppers for a two-letter code.
+
+### Changed
+- The Personalization help text now says where the signing secret comes
+  from: create it in the IDEA89 dashboard (Settings › Widget ›
+  Personalization) and paste it here.
+
+### Removed
+- **The Brand colour field** (IDEA89 > Settings > Appearance). Set the
+  colour in the IDEA89 dashboard instead, under Settings > Widget, with the
+  theme, fonts and a live preview. The plugin printed this colour on the
+  storefront and it silently beat the dashboard, so the dashboard's picker,
+  preview and contrast warning showed one colour while shoppers saw another.
+  The first time an administrator opens wp-admin after upgrading, a colour
+  you had set here is sent to IDEA89 once and the option is deleted. IDEA89
+  uses it only if the dashboard is still on the theme's own palette, so
+  shoppers keep seeing the same colour. The store locator page also follows
+  the dashboard colour now.
+- **The Store context setting** (IDEA89 > Appearance). It was saved in
+  WordPress but never sent to IDEA89, so the assistant never saw it. Describe
+  your store in the IDEA89 dashboard instead, under Settings > AI & Knowledge >
+  Store context. Text you entered here is sent to IDEA89 once, on the first
+  admin page load after updating, and used if the dashboard field is empty;
+  the WordPress copy is then deleted. If IDEA89 cannot be reached it tries
+  again 12 hours later.
+
+### Fixed
+- **Signed-in shoppers are recognised.** The chat widget never asked this
+  plugin who was signed in on WooCommerce (it skipped the check for an older
+  plugin that had no endpoint), so personalization, a signed-in shopper's
+  recent orders and "When signed in" quick actions never worked here. The
+  plugin now publishes the site's base path so the check, and the in-chat
+  order card, also reach WordPress on a subfolder install (`/shop/`).
+
 ## [1.3.0] - 2026-10-06
 
 ### Fixed

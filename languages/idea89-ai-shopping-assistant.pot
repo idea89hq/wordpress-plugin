@@ -114,10 +114,6 @@ msgstr ""
 msgid "Brand colour"
 msgstr ""
 
-#: includes/admin/class-idea89-admin-settings.php:249
-msgid "Store context"
-msgstr ""
-
 #: includes/admin/class-idea89-admin-settings.php:253
 msgid "Content sync"
 msgstr ""

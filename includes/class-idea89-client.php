@@ -275,6 +275,28 @@ class Idea89_Client {
 	}
 
 	/**
+	 * Hands the removed "Store context" field's text to IDEA89 once. IDEA89
+	 * fills the dashboard's store description with it only if that is empty.
+	 *
+	 * @param string $text The merchant's text, at most 4 KB.
+	 * @return bool True on a confirmed 2xx (whether or not it was used).
+	 */
+	public function seed_store_context( $text ) {
+		return $this->post( '/v1/plugin-settings', array( 'store_context_seed' => $text ) );
+	}
+
+	/**
+	 * One-time handover of the removed Brand colour field. IDEA89 uses it only
+	 * while the dashboard is still on the theme's own palette.
+	 *
+	 * @param string $color Six-digit hex colour.
+	 * @return bool
+	 */
+	public function seed_brand_color( $color ) {
+		return $this->post( '/v1/plugin-settings', array( 'brand_color_seed' => $color ) );
+	}
+
+	/**
 	 * Upserts a batch of serialised products.
 	 *
 	 * @param array $products Serialised products, max 100.

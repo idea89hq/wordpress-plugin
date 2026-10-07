@@ -307,7 +307,7 @@ class Idea89_Locator_Page {
 
 		return array(
 			'layout'       => '' !== $override ? $override : (string) $cfg['storefinderLayout'],
-			'brand_color'  => $this->config->get_brand_color() ? $this->config->get_brand_color() : (string) $cfg['brandColor'],
+			'brand_color'  => (string) $cfg['brandColor'],
 			'api_base'     => rtrim( (string) $this->config->get_api_url(), '/' ),
 			'api_key'      => (string) $this->config->get_api_key(),
 			'map_provider' => (string) $cfg['provider'],

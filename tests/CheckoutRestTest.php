@@ -283,9 +283,14 @@ class Idea89_Fake_WC_Checkout {
 
 class Idea89_Fake_WC_Countries {
 	public $allowed = array();
+	public $base    = 'GB';
 
 	public function get_allowed_countries() {
 		return $this->allowed;
+	}
+
+	public function get_base_country() {
+		return $this->base;
 	}
 }
 
@@ -714,6 +719,24 @@ class CheckoutRestTest extends TestCase {
 			),
 			$data['allowed_countries']
 		);
+	}
+
+	public function test_context_default_country_is_the_customers_shipping_country() {
+		$this->with_options( array( 'idea89_checkout_native_methods' => array( 'cod' ) ) );
+		$this->customer->data['shipping_country'] = 'ie';
+		$this->wc->countries->base               = 'GB';
+
+		$this->assertSame( 'IE', $this->rest()->handle_context()->get_data()['default_country'] );
+	}
+
+	public function test_context_default_country_falls_back_to_the_base_country() {
+		$this->with_options( array( 'idea89_checkout_native_methods' => array( 'cod' ) ) );
+		$this->customer->data['shipping_country'] = '';
+		$this->wc->countries->base               = 'GB';
+		$this->assertSame( 'GB', $this->rest()->handle_context()->get_data()['default_country'] );
+
+		$this->wc->countries->base = 'GB:ENG'; // A base location with a state is not a country code.
+		$this->assertSame( '', $this->rest()->handle_context()->get_data()['default_country'] );
 	}
 
 	public function test_context_methods_are_empty_when_the_allowlist_is_empty() {

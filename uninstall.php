@@ -61,6 +61,8 @@ foreach ( $idea89_options as $idea89_option ) {
 
 delete_transient( 'idea89_remote_cfg' );
 delete_transient( 'idea89_locator_locations' );
+delete_transient( 'idea89_store_context_retry' );
+delete_transient( 'idea89_brand_color_retry' );
 
 // Guest-lookup throttles are per-IP and expire within the hour, so they are
 // left to lapse rather than swept with a LIKE query over the options table.

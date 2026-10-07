@@ -98,15 +98,6 @@ class Idea89_Config {
 	}
 
 	/**
-	 * Free-text store context sent to the assistant.
-	 *
-	 * @return string
-	 */
-	public function get_store_context() {
-		return (string) get_option( 'idea89_store_context', '' );
-	}
-
-	/**
 	 * Widget corner, validated against the allow-list.
 	 *
 	 * @return string
@@ -114,18 +105,5 @@ class Idea89_Config {
 	public function get_widget_position() {
 		$position = (string) get_option( 'idea89_widget_position', self::DEFAULT_POSITION );
 		return in_array( $position, self::$positions, true ) ? $position : self::DEFAULT_POSITION;
-	}
-
-	/**
-	 * Brand colour, or an empty string when it is not a valid hex colour.
-	 *
-	 * Validated here as well as on save: the value is interpolated into a
-	 * data attribute on the storefront, so a non-hex value must never survive.
-	 *
-	 * @return string
-	 */
-	public function get_brand_color() {
-		$color = trim( (string) get_option( 'idea89_brand_color', '' ) );
-		return preg_match( '/^#[0-9a-fA-F]{6}$/', $color ) ? $color : '';
 	}
 }

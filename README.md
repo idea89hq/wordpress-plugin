@@ -75,8 +75,8 @@ Everything lives under **IDEA89** in the WordPress admin menu, built on the Word
 |---|---|
 | **Assistant name** | Shown in the widget header |
 | **Position** | Bottom-right or bottom-left |
-| **Brand colour** | Six-digit hex code for the widget header |
-| **Store context** | Free text describing what the store sells, for general questions |
+
+Brand colour, theme and fonts are set in the IDEA89 dashboard (Settings > Widget), with a live preview.
 
 ### Content sync
 

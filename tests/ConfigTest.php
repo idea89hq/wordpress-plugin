@@ -59,24 +59,4 @@ class ConfigTest extends TestCase {
 		$config = new Idea89_Config();
 		$this->assertSame( 'bottom-right', $config->get_widget_position() );
 	}
-
-	public function test_brand_color_rejects_non_hex() {
-		Functions\when( 'get_option' )->alias(
-			function ( $name, $default = '' ) {
-				return 'idea89_brand_color' === $name ? 'javascript:alert(1)' : $default;
-			}
-		);
-		$config = new Idea89_Config();
-		$this->assertSame( '', $config->get_brand_color() );
-	}
-
-	public function test_brand_color_accepts_hex() {
-		Functions\when( 'get_option' )->alias(
-			function ( $name, $default = '' ) {
-				return 'idea89_brand_color' === $name ? '#2563eb' : $default;
-			}
-		);
-		$config = new Idea89_Config();
-		$this->assertSame( '#2563eb', $config->get_brand_color() );
-	}
 }

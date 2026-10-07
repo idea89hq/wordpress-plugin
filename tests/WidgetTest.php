@@ -206,7 +206,9 @@ class WidgetTest extends TestCase {
 		);
 		$this->assertSame( 'sk_live_abc', $ours['data-key'] );
 		$this->assertSame( 'bottom-left', $ours['data-position'] );
-		$this->assertSame( '#2563eb', $ours['data-color'] );
+		// The brand colour lives in the IDEA89 dashboard only: an old saved
+		// value must never reach the storefront again.
+		$this->assertArrayNotHasKey( 'data-color', $ours );
 
 		// Somebody else's script is passed through untouched.
 		$theirs = array( 'src' => 'https://example.test/other.js', 'id' => 'other-js' );
@@ -216,7 +218,7 @@ class WidgetTest extends TestCase {
 		$this->assertSame( array( 'src' => 'x' ), $widget->loader_attributes( array( 'src' => 'x' ) ) );
 	}
 
-	public function test_brand_color_attribute_is_omitted_when_unset() {
+	public function test_no_brand_color_attribute_without_a_saved_value_either() {
 		$this->with_options( array( 'idea89_enabled' => true, 'idea89_api_key' => 'sk_live_abc' ) );
 
 		$widget = new Idea89_Widget( new Idea89_Config() );
@@ -233,13 +235,14 @@ class WidgetTest extends TestCase {
 		$widget = new Idea89_Widget( new Idea89_Config() );
 		$js     = $widget->config_js();
 
-		// __IDEA89_WC must keep exactly these three keys: _addToCartWoo and
-		// _cartSummaryWoo read them and are already shipped.
+		// __IDEA89_WC keeps the three keys _addToCartWoo and _cartSummaryWoo
+		// read (already shipped), plus basePath for the /idea89/ routes.
 		$this->assertSame(
 			array(
 				'storeApi' => 'https://shop.example.test/wp-json/wc/store/v1',
 				'nonce'    => 'nonce123',
 				'cartUrl'  => 'https://shop.example.test/cart/',
+				'basePath' => '',
 			),
 			$this->wc_global( $js )
 		);
@@ -329,13 +332,14 @@ class WidgetTest extends TestCase {
 		$widget = new Idea89_Widget( new Idea89_Config() );
 		$js     = $widget->config_js();
 
-		// __IDEA89_WC keeps its three keys regardless of this setting —
+		// __IDEA89_WC keeps its keys regardless of this setting —
 		// _addToCartWoo and _cartSummaryWoo read them and are already shipped.
 		$this->assertSame(
 			array(
 				'storeApi' => 'https://shop.example.test/wp-json/wc/store/v1',
 				'nonce'    => 'nonce123',
 				'cartUrl'  => 'https://shop.example.test/cart/',
+				'basePath' => '',
 			),
 			$this->wc_global( $js )
 		);
@@ -376,5 +380,8 @@ class WidgetTest extends TestCase {
 		$cfg = json_decode( $m[1], true );
 
 		$this->assertSame( '/shop/?idea89-checkout=1', $cfg['miniCheckoutPath'] );
+		// The widget's customer/me call and the order card prefix /idea89/
+		// routes with this, so they reach WordPress on a subfolder site.
+		$this->assertSame( '/shop', $this->wc_global( $js )['basePath'] );
 	}
 }

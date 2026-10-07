@@ -23,6 +23,8 @@ class Idea89_Admin_Settings {
 	public function register() {
 		add_action( 'admin_menu', array( $this, 'add_menu' ) );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
+		add_action( 'admin_init', array( $this, 'hand_over_store_context' ), 20 );
+		add_action( 'admin_init', array( $this, 'hand_over_brand_color' ), 20 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 	}
 
@@ -105,17 +107,6 @@ class Idea89_Admin_Settings {
 		return rtrim( esc_url_raw( $value ), '/' );
 	}
 
-	/**
-	 * Accepts a six-digit hex colour and nothing else. The value is
-	 * interpolated into a storefront data attribute.
-	 *
-	 * @param string $value Raw input.
-	 * @return string
-	 */
-	public static function sanitize_brand_color( $value ) {
-		$value = trim( (string) $value );
-		return preg_match( '/^#[0-9a-fA-F]{6}$/', $value ) ? $value : '';
-	}
 
 	/**
 	 * Constrains the widget position to the allow-list.
@@ -251,17 +242,9 @@ class Idea89_Admin_Settings {
 				'type'              => 'string',
 				'sanitize_callback' => array( $this, 'sanitize_assistant_name' ),
 			),
-			'idea89_store_context'                => array(
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_textarea_field',
-			),
 			'idea89_widget_position'              => array(
 				'type'              => 'string',
 				'sanitize_callback' => array( __CLASS__, 'sanitize_position' ),
-			),
-			'idea89_brand_color'                  => array(
-				'type'              => 'string',
-				'sanitize_callback' => array( __CLASS__, 'sanitize_brand_color' ),
 			),
 			'idea89_checkout_mode'                => array(
 				'type'              => 'string',
@@ -430,14 +413,12 @@ class Idea89_Admin_Settings {
 		add_settings_section(
 			'idea89_appearance',
 			__( 'Appearance', 'idea89-ai-shopping-assistant' ),
-			'__return_false',
+			array( $this, 'render_appearance_intro' ),
 			self::PAGE_SLUG
 		);
 
 		$this->add_field( 'idea89_assistant_name', __( 'Assistant name', 'idea89-ai-shopping-assistant' ), 'assistant_name', 'idea89_appearance' );
 		$this->add_field( 'idea89_widget_position', __( 'Position', 'idea89-ai-shopping-assistant' ), 'position', 'idea89_appearance' );
-		$this->add_field( 'idea89_brand_color', __( 'Brand colour', 'idea89-ai-shopping-assistant' ), 'text', 'idea89_appearance' );
-		$this->add_field( 'idea89_store_context', __( 'Store context', 'idea89-ai-shopping-assistant' ), 'textarea', 'idea89_appearance' );
 
 		add_settings_section(
 			'idea89_checkout',
@@ -585,6 +566,15 @@ class Idea89_Admin_Settings {
 	}
 
 	/**
+	 * Intro copy for the Appearance section: where the look is set now.
+	 *
+	 * @return void
+	 */
+	public function render_appearance_intro() {
+		echo '<p class="description">' . esc_html__( 'Theme, brand colour and fonts are set in your IDEA89 dashboard (Settings, Widget), with a live preview.', 'idea89-ai-shopping-assistant' ) . '</p>';
+	}
+
+	/**
 	 * Intro copy for the checkout experience section: what each rung on the
 	 * ladder does. Adapted from the Magento 2 module's system.xml comment for
 	 * the same setting, so a merchant running both products reads the same
@@ -654,7 +644,7 @@ class Idea89_Admin_Settings {
 	 */
 	public function render_personalization_intro() {
 		echo '<p>' . esc_html__( 'Lets the assistant recognise a returning customer, so it can pick up where a conversation left off.', 'idea89-ai-shopping-assistant' ) . '</p>';
-		echo '<p class="description">' . esc_html__( 'Your site signs a short-lived token holding only a customer id, a group id and whether the shopper is signed in. No name, email address or order history is sent. The token expires after an hour and the browser cannot forge one, because the secret never leaves this server. Paste the same secret into your IDEA89 dashboard.', 'idea89-ai-shopping-assistant' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Your site signs a short-lived token holding only a customer id, a group id and whether the shopper is signed in. No name, email address or order history is sent. The token expires after an hour and the browser cannot forge one, because the secret is never sent to it. Create the secret in your IDEA89 dashboard (Settings › Widget › Personalization) and paste it below.', 'idea89-ai-shopping-assistant' ) . '</p>';
 		echo '<p class="description">' . esc_html__( 'Switching this on also opens a server-to-server endpoint that lets IDEA89 confirm live prices and stock before quoting them. It requires the same secret and returns no customer data.', 'idea89-ai-shopping-assistant' ) . '</p>';
 	}
 
@@ -952,6 +942,92 @@ class Idea89_Admin_Settings {
 	 */
 	protected function push_assistant_name( $value ) {
 		return idea89_client()->update_assistant_name( $value );
+	}
+
+	/**
+	 * One-time handover of the removed "Store context" field.
+	 *
+	 * The field was saved in WordPress but never sent to IDEA89, so the
+	 * assistant never saw it. The store description now lives only in the
+	 * IDEA89 dashboard (AI & Knowledge). Whatever a merchant typed here is sent
+	 * once; IDEA89 uses it only if the dashboard field is still empty, and the
+	 * option is deleted once IDEA89 has confirmed. On failure the option stays
+	 * and the next try waits 12 hours, so an unreachable API never slows down
+	 * every admin page.
+	 *
+	 * @return void
+	 */
+	public function hand_over_store_context() {
+		$text = trim( (string) get_option( 'idea89_store_context', '' ) );
+		if ( '' === $text ) {
+			return;
+		}
+		if ( get_transient( 'idea89_store_context_retry' ) ) {
+			return;
+		}
+		// The dashboard field's limit is 4 KB (every chat turn includes it);
+		// cut on a character boundary rather than have the API refuse it.
+		if ( strlen( $text ) > 4096 ) {
+			$text = function_exists( 'mb_strcut' ) ? mb_strcut( $text, 0, 4096, 'UTF-8' ) : substr( $text, 0, 4096 );
+		}
+		if ( ! $this->push_store_context_seed( $text ) ) {
+			set_transient( 'idea89_store_context_retry', 1, 12 * HOUR_IN_SECONDS );
+			return;
+		}
+		delete_option( 'idea89_store_context' );
+	}
+
+	/**
+	 * One-time handover of the removed "Brand colour" field.
+	 *
+	 * The field was printed on the storefront as data-color and silently beat
+	 * the colour picked in the IDEA89 dashboard. The colour now lives only in
+	 * the dashboard. A saved colour is sent once; IDEA89 uses it only while the
+	 * dashboard is still on the theme's own palette, so shoppers keep seeing
+	 * the colour they saw before. The option is deleted once IDEA89 has
+	 * confirmed. On failure the next try waits 12 hours.
+	 *
+	 * @return void
+	 */
+	public function hand_over_brand_color() {
+		$color = trim( (string) get_option( 'idea89_brand_color', '' ) );
+		if ( '' === $color ) {
+			return;
+		}
+		if ( ! preg_match( '/^#[0-9a-fA-F]{6}$/', $color ) ) {
+			delete_option( 'idea89_brand_color' ); // Nothing the widget could use.
+			return;
+		}
+		if ( get_transient( 'idea89_brand_color_retry' ) ) {
+			return;
+		}
+		if ( ! $this->push_brand_color_seed( $color ) ) {
+			set_transient( 'idea89_brand_color_retry', 1, 12 * HOUR_IN_SECONDS );
+			return;
+		}
+		delete_option( 'idea89_brand_color' );
+	}
+
+	/**
+	 * Sends the old brand colour to IDEA89. A seam, for the same reason as
+	 * push_assistant_name(): idea89_client() cannot be stubbed.
+	 *
+	 * @param string $color Six-digit hex colour.
+	 * @return bool
+	 */
+	protected function push_brand_color_seed( $color ) {
+		return idea89_client()->seed_brand_color( $color );
+	}
+
+	/**
+	 * Sends the old store context to IDEA89. A seam, for the same reason as
+	 * push_assistant_name(): idea89_client() cannot be stubbed.
+	 *
+	 * @param string $text The merchant's text.
+	 * @return bool
+	 */
+	protected function push_store_context_seed( $text ) {
+		return idea89_client()->seed_store_context( $text );
 	}
 
 	/**

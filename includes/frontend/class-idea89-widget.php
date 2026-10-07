@@ -118,11 +118,6 @@ class Idea89_Widget {
 		$attributes['data-key']      = $this->config->get_api_key();
 		$attributes['data-position'] = $this->config->get_widget_position();
 
-		$brand_color = $this->config->get_brand_color();
-		if ( '' !== $brand_color ) {
-			$attributes['data-color'] = $brand_color;
-		}
-
 		return $attributes;
 	}
 
@@ -191,6 +186,10 @@ class Idea89_Widget {
 				'storeApi' => $store_api,
 				'nonce'    => $nonce,
 				'cartUrl'  => $cart_url,
+				// '' for a root install, '/shop' for a subfolder one. The chat
+				// widget and the order-tracking card prefix /idea89/... with it,
+				// so a subfolder site's customer/me and order routes resolve.
+				'basePath' => $this->mini_checkout_base_path(),
 			),
 			$flags
 		);

@@ -320,6 +320,7 @@ class Idea89_Checkout_Rest {
 				'methods'           => $methods,
 				'needs_shipping'    => (bool) $cart->needs_shipping(),
 				'allowed_countries' => $this->allowed_countries(),
+				'default_country'   => $this->default_country(),
 			),
 			200
 		);
@@ -911,6 +912,29 @@ class Idea89_Checkout_Rest {
 			);
 		}
 		return $out;
+	}
+
+	/**
+	 * The country the delivery form starts on: the customer's shipping
+	 * country (a signed-in customer's address, or what WooCommerce's
+	 * "Default customer location" setting gives a guest), else the shop's
+	 * base country. '' when neither is a 2-letter code; the widget then
+	 * starts on the first allowed country.
+	 *
+	 * @return string
+	 */
+	private function default_country() {
+		if ( ! function_exists( 'WC' ) || ! WC() ) {
+			return '';
+		}
+		$code = '';
+		if ( ! empty( WC()->customer ) ) {
+			$code = strtoupper( trim( (string) WC()->customer->get_shipping_country() ) );
+		}
+		if ( ! preg_match( '/^[A-Z]{2}$/', $code ) && ! empty( WC()->countries ) ) {
+			$code = strtoupper( trim( (string) WC()->countries->get_base_country() ) );
+		}
+		return preg_match( '/^[A-Z]{2}$/', $code ) ? $code : '';
 	}
 
 	/**

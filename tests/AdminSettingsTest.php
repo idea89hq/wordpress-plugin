@@ -41,14 +41,6 @@ class AdminSettingsTest extends TestCase {
 		$this->assertSame( '', Idea89_Admin_Settings::sanitize_api_url( '' ) );
 	}
 
-	public function test_brand_color_accepts_six_digit_hex_only() {
-		$this->assertSame( '#2563eb', Idea89_Admin_Settings::sanitize_brand_color( '#2563eb' ) );
-		$this->assertSame( '#2563EB', Idea89_Admin_Settings::sanitize_brand_color( ' #2563EB ' ) );
-		$this->assertSame( '', Idea89_Admin_Settings::sanitize_brand_color( 'red' ) );
-		$this->assertSame( '', Idea89_Admin_Settings::sanitize_brand_color( '#fff' ) );
-		$this->assertSame( '', Idea89_Admin_Settings::sanitize_brand_color( '"><script>' ) );
-	}
-
 	public function test_position_falls_back_to_the_default() {
 		$this->assertSame( 'bottom-left', Idea89_Admin_Settings::sanitize_position( 'bottom-left' ) );
 		$this->assertSame( 'bottom-right', Idea89_Admin_Settings::sanitize_position( 'nonsense' ) );
@@ -244,5 +236,153 @@ class AdminSettingsTest extends TestCase {
 
 		$this->assertSame( 'Mira', $settings->sanitize_assistant_name( '  Mira  ' ) );
 		$this->assertSame( 0, $settings->calls );
+	}
+
+	/* ------------- Store context: one-time handover to the dashboard ------------- */
+
+	/**
+	 * Stubs the option, transient and delete calls the handover makes, and
+	 * overrides the network seam.
+	 *
+	 * @param string $stored  What idea89_store_context holds.
+	 * @param bool   $push_ok What the push returns.
+	 * @param array  $log     Collects side effects, by reference.
+	 * @param bool   $waiting Whether a retry transient is set.
+	 * @return object
+	 */
+	private function handover_settings( $stored, $push_ok, &$log, $waiting = false ) {
+		$log = array();
+		if ( ! defined( 'HOUR_IN_SECONDS' ) ) {
+			define( 'HOUR_IN_SECONDS', 3600 );
+		}
+		Functions\when( 'get_option' )->alias(
+			function ( $name, $default = '' ) use ( $stored ) {
+				return 'idea89_store_context' === $name ? $stored : $default;
+			}
+		);
+		Functions\when( 'get_transient' )->justReturn( $waiting ? 1 : false );
+		Functions\when( 'set_transient' )->alias(
+			function ( $name, $value, $ttl ) use ( &$log ) {
+				$log[] = 'retry:' . $name . ':' . $ttl;
+			}
+		);
+		Functions\when( 'delete_option' )->alias(
+			function ( $name ) use ( &$log ) {
+				$log[] = 'delete:' . $name;
+			}
+		);
+
+		return new class( $push_ok, $log ) extends Idea89_Admin_Settings {
+			public $ok;
+			public $sent = array();
+			public function __construct( $ok ) {
+				$this->ok = $ok;
+			}
+			protected function push_store_context_seed( $text ) {
+				$this->sent[] = $text;
+				return $this->ok;
+			}
+		};
+	}
+
+	public function test_saved_store_context_is_handed_over_once_then_deleted() {
+		$settings = $this->handover_settings( "  We sell handmade soap.\n", true, $log );
+		$settings->hand_over_store_context();
+		$this->assertSame( array( 'We sell handmade soap.' ), $settings->sent );
+		$this->assertSame( array( 'delete:idea89_store_context' ), $log );
+	}
+
+	public function test_a_failed_handover_keeps_the_text_and_waits_before_retrying() {
+		$settings = $this->handover_settings( 'We sell handmade soap.', false, $log );
+		$settings->hand_over_store_context();
+		$this->assertSame( array( 'retry:idea89_store_context_retry:43200' ), $log );
+	}
+
+	public function test_nothing_is_sent_when_there_is_no_text_or_a_retry_is_pending() {
+		$empty = $this->handover_settings( '   ', true, $log );
+		$empty->hand_over_store_context();
+		$this->assertSame( array(), $empty->sent );
+
+		$waiting = $this->handover_settings( 'We sell soap.', true, $log, true );
+		$waiting->hand_over_store_context();
+		$this->assertSame( array(), $waiting->sent );
+		$this->assertSame( array(), $log );
+	}
+
+	public function test_text_over_the_dashboard_limit_is_cut_on_a_character_boundary() {
+		$settings = $this->handover_settings( str_repeat( 'é', 3000 ), true, $log );
+		$settings->hand_over_store_context();
+		$this->assertLessThanOrEqual( 4096, strlen( $settings->sent[0] ) );
+		$this->assertTrue( mb_check_encoding( $settings->sent[0], 'UTF-8' ) );
+	}
+
+	/**
+	 * A settings object whose brand colour handover is observable.
+	 *
+	 * @param string     $saved   Saved option value.
+	 * @param bool       $push_ok What IDEA89 answers.
+	 * @param array|null $log     Receives option/transient writes.
+	 * @param bool       $waiting Whether a retry is pending.
+	 */
+	private function colour_handover( $saved, $push_ok, &$log, $waiting = false ) {
+		$log = array();
+		Functions\when( 'get_option' )->alias(
+			function ( $name, $default = '' ) use ( $saved ) {
+				return 'idea89_brand_color' === $name ? $saved : $default;
+			}
+		);
+		Functions\when( 'get_transient' )->justReturn( $waiting ? 1 : false );
+		Functions\when( 'set_transient' )->alias(
+			function ( $name, $value, $ttl ) use ( &$log ) {
+				$log[] = 'retry:' . $name . ':' . $ttl;
+			}
+		);
+		Functions\when( 'delete_option' )->alias(
+			function ( $name ) use ( &$log ) {
+				$log[] = 'delete:' . $name;
+			}
+		);
+
+		return new class( $push_ok ) extends Idea89_Admin_Settings {
+			public $ok;
+			public $sent = array();
+			public function __construct( $ok ) {
+				$this->ok = $ok;
+			}
+			protected function push_brand_color_seed( $color ) {
+				$this->sent[] = $color;
+				return $this->ok;
+			}
+		};
+	}
+
+	public function test_saved_brand_color_is_handed_over_once_then_deleted() {
+		$settings = $this->colour_handover( ' #2563eb ', true, $log );
+		$settings->hand_over_brand_color();
+		$this->assertSame( array( '#2563eb' ), $settings->sent );
+		$this->assertSame( array( 'delete:idea89_brand_color' ), $log );
+	}
+
+	public function test_a_failed_brand_color_handover_keeps_it_and_waits_before_retrying() {
+		$settings = $this->colour_handover( '#2563eb', false, $log );
+		$settings->hand_over_brand_color();
+		$this->assertSame( array( 'retry:idea89_brand_color_retry:43200' ), $log );
+	}
+
+	public function test_no_brand_color_is_sent_when_unset_invalid_or_a_retry_is_pending() {
+		$empty = $this->colour_handover( '', true, $log );
+		$empty->hand_over_brand_color();
+		$this->assertSame( array(), $empty->sent );
+		$this->assertSame( array(), $log );
+
+		$bad = $this->colour_handover( 'javascript:alert(1)', true, $log );
+		$bad->hand_over_brand_color();
+		$this->assertSame( array(), $bad->sent );
+		$this->assertSame( array( 'delete:idea89_brand_color' ), $log );
+
+		$waiting = $this->colour_handover( '#2563eb', true, $log, true );
+		$waiting->hand_over_brand_color();
+		$this->assertSame( array(), $waiting->sent );
+		$this->assertSame( array(), $log );
 	}
 }
