@@ -5,7 +5,7 @@ Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.4.0
+Stable tag: 1.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -72,6 +72,8 @@ Once a key is configured, the following data is sent to api.idea89.com:
 
 The widget itself is served from api.idea89.com rather than bundled into the plugin, because the assistant's interface is part of the hosted service and is updated centrally. The plugin prints only the loader tag and your public configuration.
 
+If you turn on **Load with Subresource Integrity**, your WordPress server also asks api.idea89.com, at most once a minute and usually once an hour, for the address and integrity hash of the current widget copy. That request sends only your API key.
+
 No data is sent for training third-party AI models on other customers' behalf, and the plugin never transmits WordPress user accounts, passwords, or payment details.
 
 Full terms and privacy policy for the IDEA89 service: [Terms of Service](https://idea89.com/terms) and [Privacy Policy](https://idea89.com/privacy).
@@ -136,6 +138,10 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 3. Content Sync screen showing auto-detected FAQ sources.
 
 == Changelog ==
+
+= 1.5.0 =
+* **Load with Subresource Integrity** (Settings > Appearance, off by default). The widget then loads from a fixed copy whose address is the SHA-384 of its contents, with an `integrity` hash and `crossorigin="anonymous"` on the script tag, so the browser refuses it if it is ever altered on the way. Security scanners and PCI DSS 6.4.3 reviews flag every third-party script without one. If IDEA89 cannot be reached, the widget loads as before. With it on, dashboard changes reach your storefront within the hour, and when your page cache refreshes if you use one.
+* **Fixed:** with Checkout in chat, a second chat launcher no longer appears over the checkout form inside the chat panel.
 
 = 1.4.0 =
 * **Signed-in shoppers are recognised.** The chat never asked this plugin who was signed in, so personalization, a signed-in shopper's recent orders and "When signed in" quick actions did not work on WooCommerce. They do now, including on a WordPress install in a subfolder.
@@ -206,6 +212,9 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 * Initial release. Catalogue, category, page, coupon, FAQ and content sync; storefront chat widget with WooCommerce Store API add-to-cart; admin settings with Test Connection and Sync Now.
 
 == Upgrade Notice ==
+
+= 1.5.0 =
+Adds an optional "Load with Subresource Integrity" setting for stores whose security scans or PCI DSS reviews ask for an integrity hash on third-party scripts. Off by default; nothing changes until you turn it on.
 
 = 1.4.0 =
 Signed-in shoppers are now recognised on WooCommerce. Brand colour and store context move to your IDEA89 dashboard; anything you set here is handed over automatically.

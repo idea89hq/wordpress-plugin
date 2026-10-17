@@ -32,12 +32,21 @@ class Idea89_Widget {
 	private $config;
 
 	/**
+	 * Pinned-script lookup for "Load with Subresource Integrity".
+	 *
+	 * @var Idea89_Widget_Pin
+	 */
+	private $pin;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param Idea89_Config $config Configuration reader.
+	 * @param Idea89_Config          $config Configuration reader.
+	 * @param Idea89_Widget_Pin|null $pin    Pinned-script lookup; built from $config when omitted.
 	 */
-	public function __construct( Idea89_Config $config ) {
+	public function __construct( Idea89_Config $config, $pin = null ) {
 		$this->config = $config;
+		$this->pin    = $pin instanceof Idea89_Widget_Pin ? $pin : new Idea89_Widget_Pin( $config );
 	}
 
 	/**
@@ -70,6 +79,12 @@ class Idea89_Widget {
 		if ( is_admin() ) {
 			return false;
 		}
+		// The framed mini checkout prints wp_head(), which would load a second
+		// widget inside the frame, its launcher over the checkout form. The
+		// widget belongs to the page that frames the checkout.
+		if ( get_query_var( Idea89_Mini_Checkout::QUERY_VAR ) ) {
+			return false;
+		}
 		return $this->config->is_enabled() && $this->config->is_configured();
 	}
 
@@ -83,7 +98,10 @@ class Idea89_Widget {
 			return;
 		}
 
-		$loader_url = self::build_loader_url( $this->config->get_api_url(), $this->config->get_api_key() );
+		// A pinned copy when the store loads with Subresource Integrity and
+		// the API answered with a valid pin; the rolling URL otherwise.
+		$pin        = $this->pin->get();
+		$loader_url = null !== $pin ? $pin['src'] : self::build_loader_url( $this->config->get_api_url(), $this->config->get_api_key() );
 
 		// Version is null on purpose: the API versions the loader itself and
 		// appending ?ver= would fight its own cache headers. Async matches
@@ -104,8 +122,8 @@ class Idea89_Widget {
 	}
 
 	/**
-	 * Adds the loader's data-* attributes to its own <script> tag, and no
-	 * other. Core escapes every value when it prints the tag.
+	 * Adds the loader's data-* attributes (and integrity, for a pinned
+	 * copy) to its own <script> tag, and no other. Core escapes every value when it prints the tag.
 	 *
 	 * @param array<string,mixed> $attributes Tag attributes core is about to print.
 	 * @return array<string,mixed>
@@ -117,6 +135,14 @@ class Idea89_Widget {
 
 		$attributes['data-key']      = $this->config->get_api_key();
 		$attributes['data-position'] = $this->config->get_widget_position();
+
+		// Same memoised answer enqueue() used, so the hash always matches
+		// the src the tag was registered with.
+		$pin = $this->pin->get();
+		if ( null !== $pin ) {
+			$attributes['integrity']   = $pin['integrity'];
+			$attributes['crossorigin'] = 'anonymous';
+		}
 
 		return $attributes;
 	}

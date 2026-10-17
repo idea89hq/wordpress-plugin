@@ -132,6 +132,7 @@ class Idea89_Plugin {
 		add_action( 'update_option_idea89_api_key', array( 'Idea89_Remote_Config', 'flush' ) );
 		add_action( 'update_option_idea89_api_url', array( 'Idea89_Remote_Config', 'flush' ) );
 
+		require_once IDEA89_PLUGIN_DIR . 'includes/frontend/class-idea89-widget-pin.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/frontend/class-idea89-widget.php';
 
 		$widget = new Idea89_Widget( idea89_config() );

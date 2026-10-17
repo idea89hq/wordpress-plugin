@@ -246,6 +246,11 @@ class Idea89_Admin_Settings {
 				'type'              => 'string',
 				'sanitize_callback' => array( __CLASS__, 'sanitize_position' ),
 			),
+			'idea89_widget_integrity'             => array(
+				'type'              => 'boolean',
+				'sanitize_callback' => 'rest_sanitize_boolean',
+				'default'           => false,
+			),
 			'idea89_checkout_mode'                => array(
 				'type'              => 'string',
 				'sanitize_callback' => array( __CLASS__, 'sanitize_checkout_mode' ),
@@ -419,6 +424,7 @@ class Idea89_Admin_Settings {
 
 		$this->add_field( 'idea89_assistant_name', __( 'Assistant name', 'idea89-ai-shopping-assistant' ), 'assistant_name', 'idea89_appearance' );
 		$this->add_field( 'idea89_widget_position', __( 'Position', 'idea89-ai-shopping-assistant' ), 'position', 'idea89_appearance' );
+		$this->add_field( 'idea89_widget_integrity', __( 'Load with Subresource Integrity', 'idea89-ai-shopping-assistant' ), 'integrity', 'idea89_appearance' );
 
 		add_settings_section(
 			'idea89_checkout',
@@ -1165,6 +1171,25 @@ class Idea89_Admin_Settings {
 					esc_attr( $name ),
 					esc_textarea( (string) $value )
 				);
+				break;
+
+			case 'integrity':
+				printf(
+					'<input type="hidden" name="%1$s" value="0" />',
+					esc_attr( $name )
+				);
+				printf(
+					'<label><input type="checkbox" name="%1$s" value="1" %2$s /> %3$s</label>',
+					esc_attr( $name ),
+					checked( (bool) $value, true, false ),
+					esc_html__( 'Enabled', 'idea89-ai-shopping-assistant' )
+				);
+				echo '<p class="description">'
+					. esc_html__( 'The widget loads from a fixed copy with an integrity hash, so the browser refuses it if it is ever altered on the way. Security scanners and PCI DSS 6.4.3 reviews look for this on every third-party script.', 'idea89-ai-shopping-assistant' )
+					. '</p>';
+				echo '<p class="description">'
+					. esc_html__( 'Changes you make in the IDEA89 dashboard then reach your storefront within the hour, and when your page cache refreshes if you use one, instead of within five minutes. Off (default): the widget always loads its latest version.', 'idea89-ai-shopping-assistant' )
+					. '</p>';
 				break;
 
 			case 'position':

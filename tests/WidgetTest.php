@@ -10,6 +10,7 @@ require_once IDEA89_PLUGIN_DIR . 'includes/class-idea89-checkout-config.php';
 // that reference still has to resolve to a loaded class.
 require_once IDEA89_PLUGIN_DIR . 'includes/checkout/class-idea89-checkout-bridge.php';
 require_once IDEA89_PLUGIN_DIR . 'includes/checkout/class-idea89-mini-checkout.php';
+require_once IDEA89_PLUGIN_DIR . 'includes/frontend/class-idea89-widget-pin.php';
 require_once IDEA89_PLUGIN_DIR . 'includes/frontend/class-idea89-widget.php';
 
 class WidgetTest extends TestCase {
@@ -21,6 +22,8 @@ class WidgetTest extends TestCase {
 		// first (the widget must never render in wp-admin), and without
 		// WordPress loaded that function does not exist.
 		Functions\when( 'is_admin' )->justReturn( false );
+		// should_render() also skips the framed mini checkout request.
+		Functions\when( 'get_query_var' )->justReturn( '' );
 		// render() now also builds window.__IDEA89_CHECKOUT via
 		// Idea89_Checkout_Config, which calls these three.
 		Functions\when( 'wp_parse_url' )->alias( 'parse_url' );
@@ -84,6 +87,19 @@ class WidgetTest extends TestCase {
 		// Otherwise enabled and configured — is_admin() alone must block it.
 		$this->with_options( array( 'idea89_enabled' => true, 'idea89_api_key' => 'sk_live_abc' ) );
 		Functions\when( 'is_admin' )->justReturn( true );
+		$widget = new Idea89_Widget( new Idea89_Config() );
+		$this->assertFalse( $widget->should_render() );
+	}
+
+	public function test_does_not_render_inside_the_framed_mini_checkout() {
+		// Live d89 (Magento, same layout bug), 2026-10-07: the framed checkout
+		// loaded a second widget whose launcher sat over the checkout form.
+		$this->with_options( array( 'idea89_enabled' => true, 'idea89_api_key' => 'sk_live_abc' ) );
+		Functions\when( 'get_query_var' )->alias(
+			function ( $name ) {
+				return Idea89_Mini_Checkout::QUERY_VAR === $name ? '1' : '';
+			}
+		);
 		$widget = new Idea89_Widget( new Idea89_Config() );
 		$this->assertFalse( $widget->should_render() );
 	}
@@ -383,5 +399,68 @@ class WidgetTest extends TestCase {
 		// The widget's customer/me call and the order card prefix /idea89/
 		// routes with this, so they reach WordPress on a subfolder site.
 		$this->assertSame( '/shop', $this->wc_global( $js )['basePath'] );
+	}
+
+	/**
+	 * A pin lookup that answers with a fixed value and counts its calls.
+	 *
+	 * @param array|null $answer The pin to return.
+	 * @return Idea89_Widget_Pin
+	 */
+	private function fixed_pin( $answer ) {
+		return new class( $answer ) extends Idea89_Widget_Pin {
+			public $answer;
+			public $calls = 0;
+			public function __construct( $answer ) {
+				$this->answer = $answer;
+			}
+			public function get() {
+				++$this->calls;
+				return $this->answer;
+			}
+		};
+	}
+
+	public function test_a_pinned_store_loads_the_pinned_copy_with_its_integrity_hash() {
+		$this->with_options( array( 'idea89_enabled' => true, 'idea89_api_key' => 'sk_live_abc' ) );
+		$this->stub_store_environment();
+		$calls = &$this->record_enqueues();
+
+		$pinned = 'https://api.idea89.com/widget/v1/p/' . str_repeat( 'a', 96 ) . '.js';
+		$hash   = 'sha384-' . str_repeat( 'A', 64 );
+		$widget = new Idea89_Widget( new Idea89_Config(), $this->fixed_pin( array( 'src' => $pinned, 'integrity' => $hash ) ) );
+		$widget->enqueue();
+
+		$this->assertSame( $pinned, $calls['register']['src'] );
+		$this->assertSame( 'before', $calls['inline']['position'] );
+
+		$attrs = $widget->loader_attributes( array( 'src' => $pinned, 'id' => Idea89_Widget::HANDLE . '-js' ) );
+		$this->assertSame( $hash, $attrs['integrity'] );
+		$this->assertSame( 'anonymous', $attrs['crossorigin'] );
+		$this->assertSame( 'sk_live_abc', $attrs['data-key'] );
+	}
+
+	public function test_without_a_pin_the_rolling_url_is_loaded_with_no_integrity() {
+		$this->with_options( array( 'idea89_enabled' => true, 'idea89_api_key' => 'sk_live_abc' ) );
+		$this->stub_store_environment();
+		$calls = &$this->record_enqueues();
+
+		$widget = new Idea89_Widget( new Idea89_Config(), $this->fixed_pin( null ) );
+		$widget->enqueue();
+
+		$this->assertSame( 'https://api.idea89.com/widget/v1/sk_live_abc.js', $calls['register']['src'] );
+		$attrs = $widget->loader_attributes( array( 'id' => Idea89_Widget::HANDLE . '-js' ) );
+		$this->assertArrayNotHasKey( 'integrity', $attrs );
+		$this->assertArrayNotHasKey( 'crossorigin', $attrs );
+	}
+
+	public function test_somebody_elses_script_never_gets_our_integrity_hash() {
+		$this->with_options( array( 'idea89_enabled' => true, 'idea89_api_key' => 'sk_live_abc' ) );
+		$pin    = $this->fixed_pin( array( 'src' => 'x', 'integrity' => 'sha384-' . str_repeat( 'A', 64 ) ) );
+		$widget = new Idea89_Widget( new Idea89_Config(), $pin );
+
+		$theirs = array( 'src' => 'https://example.test/other.js', 'id' => 'other-js' );
+		$this->assertSame( $theirs, $widget->loader_attributes( $theirs ) );
+		$this->assertSame( 0, $pin->calls );
 	}
 }

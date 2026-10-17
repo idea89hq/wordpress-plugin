@@ -106,4 +106,15 @@ class Idea89_Config {
 		$position = (string) get_option( 'idea89_widget_position', self::DEFAULT_POSITION );
 		return in_array( $position, self::$positions, true ) ? $position : self::DEFAULT_POSITION;
 	}
+
+	/**
+	 * Load the widget from a pinned, content-addressed URL with Subresource
+	 * Integrity (Idea89_Widget_Pin). Off by default: a pinned storefront picks
+	 * up dashboard changes within the hour, not within minutes.
+	 *
+	 * @return bool
+	 */
+	public function is_widget_integrity_enabled() {
+		return (bool) get_option( 'idea89_widget_integrity', false );
+	}
 }

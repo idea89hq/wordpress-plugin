@@ -16,6 +16,7 @@ $idea89_options = array(
 	'idea89_assistant_name',
 	'idea89_store_context',
 	'idea89_widget_position',
+	'idea89_widget_integrity',
 	'idea89_brand_color',
 	'idea89_sync_products',
 	'idea89_sync_categories',
@@ -64,7 +65,8 @@ delete_transient( 'idea89_locator_locations' );
 delete_transient( 'idea89_store_context_retry' );
 delete_transient( 'idea89_brand_color_retry' );
 
-// Guest-lookup throttles are per-IP and expire within the hour, so they are
+// Guest-lookup throttles are per-IP and expire within the hour, and so do the
+// pinned widget answers (idea89_widget_pin_*, keyed by a hash), so they are
 // left to lapse rather than swept with a LIKE query over the options table.
 
 if ( function_exists( 'as_unschedule_all_actions' ) ) {
