@@ -53,6 +53,57 @@ class Idea89_Fake_WC_Cart {
 	public function calculate_totals() {
 		++$this->totals_calculated;
 	}
+
+	// The totals breakdown and discount codes (1.6).
+	public $subtotal_tax   = 0.0;
+	public $shipping_total = 0.0;
+	public $shipping_tax   = 0.0;
+	public $discount_total = 0.0;
+	public $discount_tax   = 0.0;
+	public $total_tax      = 0.0;
+	public $coupons        = array();
+	public $valid_coupons  = array();
+
+	public function get_subtotal_tax() {
+		return $this->subtotal_tax;
+	}
+
+	public function get_shipping_total() {
+		return $this->shipping_total;
+	}
+
+	public function get_shipping_tax() {
+		return $this->shipping_tax;
+	}
+
+	public function get_discount_total() {
+		return $this->discount_total;
+	}
+
+	public function get_discount_tax() {
+		return $this->discount_tax;
+	}
+
+	public function get_total_tax() {
+		return $this->total_tax;
+	}
+
+	public function get_applied_coupons() {
+		return $this->coupons;
+	}
+
+	public function apply_coupon( $code ) {
+		if ( ! in_array( $code, $this->valid_coupons, true ) ) {
+			return false;
+		}
+		$this->coupons[] = $code;
+		return true;
+	}
+
+	public function remove_coupon( $code ) {
+		$this->coupons = array_values( array_diff( $this->coupons, array( $code ) ) );
+		return true;
+	}
 }
 
 /**
@@ -389,6 +440,10 @@ class CheckoutRestTest extends TestCase {
 		Monkey\setUp();
 
 		Functions\when( '__' )->returnArg( 1 );
+		// No terms box unless a test turns it on (with_terms()).
+		Functions\when( 'wc_terms_and_conditions_checkbox_enabled' )->justReturn( false );
+		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
+		Functions\when( 'esc_url_raw' )->returnArg( 1 );
 		Functions\when( 'sanitize_email' )->alias(
 			function ( $value ) {
 				return trim( (string) $value );
@@ -739,6 +794,36 @@ class CheckoutRestTest extends TestCase {
 		$this->assertSame( '', $this->rest()->handle_context()->get_data()['default_country'] );
 	}
 
+	public function test_context_prefill_is_what_the_shopper_already_gave() {
+		$this->with_options( array( 'idea89_checkout_native_methods' => array( 'cod' ) ) );
+		$this->customer->data = array(
+			'billing_email'      => 'sam@example.com',
+			'billing_first_name' => 'Sam',
+			'billing_phone'      => '07700900000',
+			'shipping_last_name' => 'Lee',
+			'shipping_address_1' => '1 High Street',
+			'shipping_country'   => 'gb',
+		);
+
+		$this->assertSame(
+			array(
+				'email'      => 'sam@example.com',
+				'firstname'  => 'Sam',
+				'lastname'   => 'Lee',
+				'street'     => '1 High Street',
+				'country_id' => 'GB',
+				'telephone'  => '07700900000',
+			),
+			$this->rest()->handle_context()->get_data()['prefill']
+		);
+	}
+
+	public function test_context_prefill_is_empty_for_a_new_shopper() {
+		$this->with_options( array( 'idea89_checkout_native_methods' => array( 'cod' ) ) );
+		$this->customer->data = array();
+		$this->assertSame( array(), $this->rest()->handle_context()->get_data()['prefill'] );
+	}
+
 	public function test_context_methods_are_empty_when_the_allowlist_is_empty() {
 		$this->with_options( array( 'idea89_checkout_native_methods' => array() ) );
 
@@ -897,6 +982,72 @@ class CheckoutRestTest extends TestCase {
 		$this->assertSame( 1, $this->cart->totals_calculated );
 	}
 
+	public function test_address_refuses_a_phone_number_with_letters() {
+		$this->with_options( array() );
+		$response = $this->rest()->handle_address(
+			$this->request_with_body(
+				array(
+					'street'     => array( '1 Test St' ),
+					'postcode'   => 'M27 8QW',
+					'country_id' => 'GB',
+					'telephone'  => '07448049454q',
+				)
+			)
+		);
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'Enter a phone number using numbers, spaces and + - ( ) . /', $response->get_data()['message'] );
+	}
+
+	public function test_address_needs_a_phone_only_when_the_store_requires_one() {
+		$body = array(
+			'street'     => array( '1 Test St' ),
+			'postcode'   => 'M27 8QW',
+			'country_id' => 'GB',
+		);
+		$this->with_options( array() );
+		$response = $this->rest()->handle_address( $this->request_with_body( $body ) );
+		$this->assertSame( 'Enter a phone number.', $response->get_data()['message'] );
+		$this->assertTrue( $this->rest()->handle_context()->get_data()['phone_required'] );
+
+		$this->with_options( array( 'woocommerce_checkout_phone_field' => 'optional' ) );
+		$this->assertSame( 200, $this->rest()->handle_address( $this->request_with_body( $body ) )->get_status() );
+		$this->assertFalse( $this->rest()->handle_context()->get_data()['phone_required'] );
+	}
+
+	private function with_terms() {
+		Functions\when( 'wc_terms_and_conditions_checkbox_enabled' )->justReturn( true );
+		Functions\when( 'wc_terms_and_conditions_page_id' )->justReturn( 7 );
+		Functions\when( 'get_the_title' )->justReturn( 'Terms of Sale' );
+		Functions\when( 'get_permalink' )->justReturn( 'https://shop.example.test/terms/' );
+		Functions\when( 'wc_get_terms_and_conditions_checkbox_text' )->justReturn( 'I have read and agree to the website [terms]' );
+	}
+
+	public function test_context_carries_the_stores_terms_box() {
+		$this->with_options( array( 'idea89_checkout_native_methods' => array( 'cod' ) ) );
+		$this->with_terms();
+		$this->assertSame(
+			array(
+				array(
+					'id'      => 'terms',
+					'title'   => 'Terms of Sale',
+					'label'   => 'I have read and agree to the website terms of sale',
+					'content' => '',
+					'url'     => 'https://shop.example.test/terms/',
+					'manual'  => true,
+				),
+			),
+			$this->rest()->handle_context()->get_data()['agreements']
+		);
+	}
+
+	public function test_place_refuses_until_the_terms_box_is_ticked() {
+		$this->with_options( array( 'idea89_checkout_native_methods' => array( 'cod' ) ) );
+		$this->with_terms();
+		$response = $this->rest()->handle_place( $this->request_with_body( array( 'payment_method' => 'cod' ) ) );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'Tick the box to agree to the terms and conditions.', $response->get_data()['message'] );
+	}
+
 	public function test_address_skips_shipping_calculation_for_a_virtual_cart() {
 		$this->with_options( array() );
 		$this->cart->needs_shipping = false;
@@ -908,6 +1059,7 @@ class CheckoutRestTest extends TestCase {
 					'city'       => 'London',
 					'postcode'   => 'SW1A 1AA',
 					'country_id' => 'GB',
+					'telephone'  => '020 7000 0000',
 				)
 			)
 		);
@@ -947,6 +1099,106 @@ class CheckoutRestTest extends TestCase {
 		$this->assertSame( array( 0 => 'flat_rate:5' ), $this->wc->session->get( 'chosen_shipping_methods' ) );
 		$this->assertSame( 1, $this->cart->totals_calculated );
 		$this->assertSame( '20.00', $response->get_data()['totals']['grand_total'] );
+	}
+
+	public function test_a_part_filled_form_is_kept_on_the_customer_without_blanking_other_fields() {
+		$this->with_options( array() );
+		$this->wc->customer->data['billing_city'] = 'Leeds';
+
+		$response = $this->rest()->handle_address( $this->request_with_body( array( 'partial' => true, 'email' => 'part@example.com', 'firstname' => 'Part', 'street' => array( '9 Half Lane' ), 'city' => '' ) ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'Part', $this->wc->customer->data['billing_first_name'] );
+		$this->assertSame( '9 Half Lane', $this->wc->customer->data['shipping_address_1'] );
+		$this->assertSame( 'part@example.com', $this->wc->customer->data['billing_email'] );
+		$this->assertSame( 'Leeds', $this->wc->customer->data['billing_city'] );
+	}
+
+	/* ---------------- coupon() and the totals breakdown (1.6) ---------------- */
+
+	private function coupons_on() {
+		Functions\when( 'wc_coupons_enabled' )->justReturn( true );
+		Functions\when( 'wc_format_coupon_code' )->returnArg();
+		Functions\when( 'wc_clear_notices' )->justReturn( null );
+	}
+
+	public function test_coupon_applies_a_valid_code_and_returns_the_inclusive_breakdown() {
+		$this->with_options( array( 'woocommerce_tax_display_cart' => 'incl' ) );
+		$this->coupons_on();
+		$this->cart->valid_coupons  = array( 'welcome10' );
+		$this->cart->subtotal       = 92.5;
+		$this->cart->subtotal_tax   = 18.5;
+		$this->cart->discount_total = 9.25;
+		$this->cart->discount_tax   = 1.85;
+		$this->cart->total_tax      = 16.65;
+		$this->cart->total          = 99.9;
+
+		$response = $this->rest()->handle_coupon( $this->request_with_body( array( 'code' => 'welcome10' ) ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$bd = $response->get_data()['totals']['breakdown'];
+		$this->assertSame( 'incl', $bd['basis'] );
+		$this->assertSame( '111.00', $bd['subtotal'] );
+		$this->assertSame( '-11.10', $bd['discount'] );
+		$this->assertSame( '16.65', $bd['tax'] );
+		$this->assertSame( 'WELCOME10', $bd['coupon_code'] );
+		$this->assertNull( $bd['shipping'] );
+		$this->assertSame( 1, $this->cart->totals_calculated );
+	}
+
+	public function test_a_refused_code_puts_the_previous_code_back_and_says_which_code() {
+		$this->with_options( array() );
+		$this->coupons_on();
+		$this->cart->coupons       = array( 'old5' );
+		$this->cart->valid_coupons = array( 'old5' );
+
+		$response = $this->rest()->handle_coupon( $this->request_with_body( array( 'code' => 'bad' ) ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertStringContainsString( '"BAD" is not valid', $response->get_data()['message'] );
+		$this->assertSame( array( 'old5' ), $this->cart->coupons );
+	}
+
+	public function test_coupon_remove_takes_the_code_off() {
+		$this->with_options( array() );
+		$this->coupons_on();
+		$this->cart->coupons = array( 'welcome10' );
+
+		$response = $this->rest()->handle_coupon( $this->request_with_body( array( 'remove' => true ) ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), $this->cart->coupons );
+		$this->assertNull( $response->get_data()['totals']['breakdown']['coupon_code'] );
+	}
+
+	public function test_coupon_is_refused_when_the_store_takes_no_codes() {
+		$this->with_options( array() );
+		Functions\when( 'wc_coupons_enabled' )->justReturn( false );
+
+		$response = $this->rest()->handle_coupon( $this->request_with_body( array( 'code' => 'welcome10' ) ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( array(), $this->cart->coupons );
+	}
+
+	public function test_exclusive_breakdown_lists_tax_on_top() {
+		$this->with_options( array( 'woocommerce_tax_display_cart' => 'excl' ) );
+		$this->coupons_on();
+		$this->cart->needs_shipping = true;
+		$this->wc->session->set( 'chosen_shipping_methods', array( 0 => 'flat_rate:5' ) );
+		$this->cart->subtotal       = 100.0;
+		$this->cart->shipping_total = 5.0;
+		$this->cart->total_tax      = 21.0;
+		$this->cart->total          = 126.0;
+
+		$response = $this->rest()->handle_coupon( $this->request_with_body( array( 'remove' => true ) ) );
+
+		$bd = $response->get_data()['totals']['breakdown'];
+		$this->assertSame( 'excl', $bd['basis'] );
+		$this->assertSame( '100.00', $bd['subtotal'] );
+		$this->assertSame( '5.00', $bd['shipping'] );
+		$this->assertSame( '21.00', $bd['tax'] );
+		$this->assertSame( '126.00', $bd['grand_total'] );
 	}
 
 	/* ---------------- place(): the gateway allowlist ---------------- */

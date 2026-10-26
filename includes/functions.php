@@ -257,3 +257,18 @@ function idea89_acp_feed() {
 
 	return $feed;
 }
+
+/**
+ * The product image gallery route (the chat's image viewer).
+ *
+ * @return Idea89_Product_Gallery
+ */
+function idea89_product_gallery() {
+	static $gallery = null;
+
+	if ( null === $gallery ) {
+		$gallery = new Idea89_Product_Gallery( idea89_config() );
+	}
+
+	return $gallery;
+}

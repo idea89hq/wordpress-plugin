@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-26
+
+### Added
+- **Product image gallery for the chat.** `GET /wp-json/idea89/v1/product-gallery?id=`
+  (or `?sku=`) returns the product image then its gallery at the large size, at
+  most 12, for published products the shop shows. The chat asks for it only when
+  a shopper presses a card's enlarge button; public caching for five minutes.
+- **Terms and conditions in the in-chat checkout.** When the store's terms
+  tick box is on, `context` returns it (wording and a link to the terms page)
+  and `POST /checkout/place` refuses the order until `agreement_ids` contains
+  it, as WooCommerce's own checkout does.
+- **Phone numbers by the store's own rules.** `context` returns
+  `phone_required` (the checkout phone field setting) and
+  `POST /checkout/address` refuses a blank required phone or one with
+  letters in it.
+- **The in-chat checkout remembers the shopper's details.** `GET /checkout/context`
+  now returns `prefill`: the email and delivery details already on this
+  shopper's own basket session, so the chat form opens filled in after a
+  page refresh or a visit to the store's own checkout page.
+- **Discount codes in the in-chat checkout.** `POST /checkout/coupon`
+  (`{code}` to apply, `{remove: true}` to take off) runs WooCommerce's own
+  coupon rules, one code at a time, and puts the previous code back when a
+  code is refused. Refused when the store has coupons turned off.
+- **Full order totals in the in-chat checkout.** Every checkout response now
+  carries `totals.breakdown` (subtotal, delivery, discount, tax, total) on
+  the store's own "Display prices during cart and checkout" basis. `subtotal`
+  and `grand_total` are unchanged for older widgets.
+- `POST /checkout/address` with `{partial: true}` keeps a part-filled form
+  on the customer session (never blanking a field left empty), so a shopper
+  who leaves the in-chat checkout for the store's own checkout page finds
+  what they typed already there.
+
 ## [1.5.0] - 2026-10-17
 
 ### Added

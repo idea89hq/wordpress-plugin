@@ -169,7 +169,7 @@ class Idea89_Checkout_Rest {
 	}
 
 	/**
-	 * Registers the four routes.
+	 * Registers the five routes.
 	 *
 	 * @return void
 	 */
@@ -200,6 +200,16 @@ class Idea89_Checkout_Rest {
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'handle_method' ),
+				'permission_callback' => array( $this, 'check_post_nonce' ),
+			)
+		);
+
+		register_rest_route(
+			self::REST_NAMESPACE,
+			'/checkout/coupon',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'handle_coupon' ),
 				'permission_callback' => array( $this, 'check_post_nonce' ),
 			)
 		);
@@ -318,11 +328,108 @@ class Idea89_Checkout_Rest {
 				'subtotal'          => $this->format_amount( $cart->get_subtotal() ),
 				'grand_total'       => $this->format_amount( $cart->get_total( 'edit' ) ),
 				'methods'           => $methods,
+				// The full breakdown, and whether the store takes discount
+				// codes at all (WooCommerce's own setting).
+				'totals'            => $this->totals( $cart ),
+				'coupons'           => function_exists( 'wc_coupons_enabled' ) && wc_coupons_enabled(),
 				'needs_shipping'    => (bool) $cart->needs_shipping(),
 				'allowed_countries' => $this->allowed_countries(),
 				'default_country'   => $this->default_country(),
+				// What this shopper already gave, so the chat form opens
+				// filled in after a refresh or a visit to the checkout page.
+				'prefill'           => $this->prefill(),
+				// The store's terms and conditions box, and whether it asks
+				// for a phone number (WooCommerce's own checkout settings).
+				'agreements'        => $this->agreements(),
+				'phone_required'    => 'required' === $this->phone_field(),
 			),
 			200
+		);
+	}
+
+	/**
+	 * The terms and conditions tick box WooCommerce's own checkout shows
+	 * (Settings > Advanced > Terms and conditions, or the Customizer), in
+	 * the same shape as the Magento module's list. The shopper reads the
+	 * terms on the store's own page.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function agreements() {
+		if ( ! function_exists( 'wc_terms_and_conditions_checkbox_enabled' ) || ! wc_terms_and_conditions_checkbox_enabled() ) {
+			return array();
+		}
+		$page_id = function_exists( 'wc_terms_and_conditions_page_id' ) ? (int) wc_terms_and_conditions_page_id() : 0;
+		$title   = $page_id ? trim( wp_strip_all_tags( (string) get_the_title( $page_id ) ) ) : '';
+		if ( '' === $title ) {
+			$title = __( 'Terms and conditions', 'idea89-ai-shopping-assistant' );
+		}
+		$label = function_exists( 'wc_get_terms_and_conditions_checkbox_text' ) ? (string) wc_get_terms_and_conditions_checkbox_text() : '';
+		$label = trim( wp_strip_all_tags( str_replace( '[terms]', function_exists( 'mb_strtolower' ) ? mb_strtolower( $title ) : strtolower( $title ), $label ) ) );
+		if ( '' === $label ) {
+			$label = $title;
+		}
+		$url = $page_id ? (string) get_permalink( $page_id ) : '';
+		return array(
+			array(
+				'id'      => 'terms',
+				'title'   => $title,
+				'label'   => $label,
+				'content' => '',
+				'url'     => $url ? esc_url_raw( $url ) : '',
+				'manual'  => true,
+			),
+		);
+	}
+
+	/**
+	 * WooCommerce's own phone field setting: required, optional or hidden.
+	 *
+	 * @return string
+	 */
+	private function phone_field() {
+		$value = (string) get_option( 'woocommerce_checkout_phone_field', 'required' );
+		return in_array( $value, array( 'required', 'optional', 'hidden' ), true ) ? $value : 'required';
+	}
+
+	/**
+	 * The email and delivery details already on this shopper's own customer
+	 * session (or account, when signed in). Shipping fields first, billing
+	 * as the fallback; empty fields are left out.
+	 *
+	 * @return array<string,string>
+	 */
+	private function prefill() {
+		if ( ! function_exists( 'WC' ) || ! WC() || empty( WC()->customer ) ) {
+			return array();
+		}
+		$customer = WC()->customer;
+		$read     = static function ( $key ) use ( $customer ) {
+			foreach ( array( 'get_shipping_' . $key, 'get_billing_' . $key ) as $getter ) {
+				if ( is_callable( array( $customer, $getter ) ) ) {
+					$value = trim( (string) $customer->$getter() );
+					if ( '' !== $value ) {
+						return $value;
+					}
+				}
+			}
+			return '';
+		};
+		$out      = array(
+			'email'      => is_callable( array( $customer, 'get_billing_email' ) ) ? trim( (string) $customer->get_billing_email() ) : '',
+			'firstname'  => $read( 'first_name' ),
+			'lastname'   => $read( 'last_name' ),
+			'street'     => $read( 'address_1' ),
+			'city'       => $read( 'city' ),
+			'postcode'   => $read( 'postcode' ),
+			'country_id' => strtoupper( $read( 'country' ) ),
+			'telephone'  => $read( 'phone' ),
+		);
+		return array_filter(
+			$out,
+			static function ( $v ) {
+				return '' !== $v;
+			}
 		);
 	}
 
@@ -355,6 +462,28 @@ class Idea89_Checkout_Rest {
 
 		$body = $this->body( $request );
 
+		// {partial: true}: the shopper is leaving for the store's own checkout
+		// page with part of the form filled in. Keep what they typed on the
+		// customer session (which WooCommerce's checkout form prefills from),
+		// field by field, never blanking a field they left empty, and with no
+		// shipping calculation.
+		if ( isset( $body['partial'] ) && true === $body['partial'] ) {
+			$email = isset( $body['email'] ) ? sanitize_email( (string) $body['email'] ) : '';
+			if ( '' !== $email && ! is_email( $email ) ) {
+				$email = '';
+			}
+			if ( ! function_exists( 'WC' ) || empty( WC()->customer ) ) {
+				return $this->error_response( 'checkout_error', __( 'Your basket is not available right now.', 'idea89-ai-shopping-assistant' ), 400 );
+			}
+			try {
+				$this->apply_address( WC()->customer, $body, $email, true );
+				WC()->customer->save();
+				return new WP_REST_Response( array( 'saved' => true ), 200 );
+			} catch ( \Throwable $e ) {
+				return $this->error_response( 'checkout_error', __( 'We could not save those details.', 'idea89-ai-shopping-assistant' ), 400 );
+			}
+		}
+
 		// Validated BEFORE WC()->customer is touched — same ordering
 		// Facade::setAddress() uses and for the same reason: a shopper who
 		// typed half an address must not leave a half-set address behind.
@@ -366,6 +495,16 @@ class Idea89_Checkout_Rest {
 		$email = isset( $body['email'] ) ? sanitize_email( (string) $body['email'] ) : '';
 		if ( isset( $body['email'] ) && '' !== trim( (string) $body['email'] ) && ( '' === $email || ! is_email( $email ) ) ) {
 			return $this->error_response( 'checkout_error', __( 'Enter a valid email address.', 'idea89-ai-shopping-assistant' ), 400 );
+		}
+
+		// The phone, by WooCommerce's own rules, here rather than at Place
+		// order (a refusal there used to send the shopper to the checkout page).
+		$phone = isset( $body['telephone'] ) ? trim( (string) $body['telephone'] ) : '';
+		if ( '' === $phone && 'required' === $this->phone_field() ) {
+			return $this->error_response( 'checkout_error', __( 'Enter a phone number.', 'idea89-ai-shopping-assistant' ), 400 );
+		}
+		if ( '' !== $phone && ! preg_match( '#^[\d\s+().\/ -]+$#u', $phone ) ) {
+			return $this->error_response( 'checkout_error', __( 'Enter a phone number using numbers, spaces and + - ( ) . /', 'idea89-ai-shopping-assistant' ), 400 );
 		}
 
 		$cart = $this->cart();
@@ -456,6 +595,92 @@ class Idea89_Checkout_Rest {
 	}
 
 	/**
+	 * POST /checkout/coupon
+	 *
+	 * Body: {code, form_key} applies a discount code; {remove: true,
+	 * form_key} takes it off. WooCommerce's own coupon rules decide; a code
+	 * they refuse leaves the cart as it was. One code at a time, like the
+	 * Magento side, so the review line names the code that applies.
+	 *
+	 * @param WP_REST_Request $request The incoming request.
+	 * @return WP_REST_Response
+	 */
+	public function handle_coupon( WP_REST_Request $request ) {
+		$gate = $this->origin_gate( $request );
+		if ( null !== $gate ) {
+			return $gate;
+		}
+
+		$gate = $this->feature_gate();
+		if ( null !== $gate ) {
+			return $gate;
+		}
+
+		// The same bucket as /method: it is also what stops code guessing.
+		$gate = $this->rate_limit_other_gate();
+		if ( null !== $gate ) {
+			return $gate;
+		}
+
+		$cart = $this->cart();
+		if ( null === $cart ) {
+			return $this->error_response( 'checkout_error', __( 'Your basket is not available right now.', 'idea89-ai-shopping-assistant' ), 400 );
+		}
+		if ( ! function_exists( 'wc_coupons_enabled' ) || ! wc_coupons_enabled() ) {
+			return $this->error_response( 'checkout_error', __( 'This store does not take discount codes.', 'idea89-ai-shopping-assistant' ), 400 );
+		}
+
+		$body   = $this->body( $request );
+		$remove = isset( $body['remove'] ) && true === $body['remove'];
+		$code   = isset( $body['code'] ) && is_string( $body['code'] ) ? wc_format_coupon_code( sanitize_text_field( $body['code'] ) ) : '';
+
+		try {
+			$previous = $cart->get_applied_coupons();
+			foreach ( $previous as $applied ) {
+				$cart->remove_coupon( $applied );
+			}
+			if ( ! $remove ) {
+				if ( '' === $code ) {
+					$this->restore_coupons( $cart, $previous );
+					return $this->error_response( 'checkout_error', __( 'Enter a discount code.', 'idea89-ai-shopping-assistant' ), 400 );
+				}
+				$ok = $cart->apply_coupon( $code );
+				// apply_coupon() queues a storefront notice either way; the
+				// widget shows its own line instead.
+				if ( function_exists( 'wc_clear_notices' ) ) {
+					wc_clear_notices();
+				}
+				if ( ! $ok ) {
+					$this->restore_coupons( $cart, $previous );
+					/* translators: %s: the discount code the shopper typed */
+					return $this->error_response( 'checkout_error', sprintf( __( 'The code "%s" is not valid, or does not apply to this basket.', 'idea89-ai-shopping-assistant' ), strtoupper( $code ) ), 400 );
+				}
+			}
+			$cart->calculate_totals();
+			return new WP_REST_Response( array( 'totals' => $this->totals( $cart ) ), 200 );
+		} catch ( \Throwable $e ) {
+			return $this->error_response( 'checkout_error', __( 'We could not apply that code. Try again.', 'idea89-ai-shopping-assistant' ), 400 );
+		}
+	}
+
+	/**
+	 * Puts back the codes a refused code replaced.
+	 *
+	 * @param WC_Cart  $cart  The live cart.
+	 * @param string[] $codes Codes that were applied before.
+	 * @return void
+	 */
+	private function restore_coupons( $cart, array $codes ) {
+		foreach ( $codes as $code ) {
+			$cart->apply_coupon( $code );
+		}
+		if ( function_exists( 'wc_clear_notices' ) ) {
+			wc_clear_notices();
+		}
+		$cart->calculate_totals();
+	}
+
+	/**
 	 * POST /checkout/place
 	 *
 	 * Body: {payment_method, form_key}.
@@ -491,6 +716,15 @@ class Idea89_Checkout_Rest {
 		$allowed = $this->allowed_gateways();
 		if ( '' === $payment_method || ! isset( $allowed[ $payment_method ] ) ) {
 			return $this->error_response( 'checkout_error', __( 'That payment method is not available.', 'idea89-ai-shopping-assistant' ), 400 );
+		}
+
+		// The store's terms box must have been ticked, as WooCommerce's own
+		// checkout requires; create_order() does not check it.
+		$ticked = isset( $body['agreement_ids'] ) && is_array( $body['agreement_ids'] ) ? array_map( 'strval', array_filter( $body['agreement_ids'], 'is_scalar' ) ) : array();
+		foreach ( $this->agreements() as $agreement ) {
+			if ( $agreement['manual'] && ! in_array( $agreement['id'], $ticked, true ) ) {
+				return $this->error_response( 'checkout_error', __( 'Tick the box to agree to the terms and conditions.', 'idea89-ai-shopping-assistant' ), 400 );
+			}
 		}
 
 		$cart = $this->cart();
@@ -735,12 +969,13 @@ class Idea89_Checkout_Rest {
 	 * setting both the quote's shipping and billing address from one
 	 * payload.
 	 *
-	 * @param WC_Customer         $customer WooCommerce's live customer object.
-	 * @param array<string,mixed> $body     Decoded request body.
-	 * @param string              $email    Already-validated email, or ''.
+	 * @param WC_Customer         $customer    WooCommerce's live customer object.
+	 * @param array<string,mixed> $body        Decoded request body.
+	 * @param string              $email       Already-validated email, or ''.
+	 * @param bool                $only_filled Skip empty fields (a part-filled form).
 	 * @return void
 	 */
-	private function apply_address( $customer, array $body, $email ) {
+	private function apply_address( $customer, array $body, $email, $only_filled = false ) {
 		$street = isset( $body['street'] ) ? $body['street'] : '';
 		$lines  = is_array( $street )
 			? array_values(
@@ -773,6 +1008,9 @@ class Idea89_Checkout_Rest {
 		);
 
 		foreach ( $fields as $key => $value ) {
+			if ( $only_filled && '' === $value ) {
+				continue;
+			}
 			// is_callable(), not a bare method call: real WC_Customer defines
 			// every one of these, but a store's own customer-object filter
 			// could swap in a leaner stand-in, same defensive idiom
@@ -968,15 +1206,41 @@ class Idea89_Checkout_Rest {
 	}
 
 	/**
-	 * The two totals every step response carries.
+	 * The order's totals. subtotal and grand_total keep their old meaning
+	 * for older widgets; breakdown is what the widget shows, on the store's own display basis
+	 * (WooCommerce's "Display prices during cart and checkout" setting), so
+	 * the lines always add up, exactly as the Magento module's:
+	 *   'incl': subtotal + shipping + discount = grand_total; tax inside.
+	 *   'excl': subtotal + shipping + discount + tax = grand_total.
+	 * shipping is null until a delivery method is chosen; discount is
+	 * negative and null when none; tax null when none.
 	 *
 	 * @param WC_Cart $cart The live cart.
-	 * @return array{subtotal: string, grand_total: string}
+	 * @return array<string, mixed>
 	 */
 	private function totals( $cart ) {
+		$incl     = 'incl' === get_option( 'woocommerce_tax_display_cart' );
+		$chosen   = WC()->session ? (array) WC()->session->get( 'chosen_shipping_methods', array() ) : array();
+		$has_ship = $cart->needs_shipping() && array_filter( $chosen ) !== array();
+		$subtotal = (float) $cart->get_subtotal() + ( $incl ? (float) $cart->get_subtotal_tax() : 0.0 );
+		$shipping = (float) $cart->get_shipping_total() + ( $incl ? (float) $cart->get_shipping_tax() : 0.0 );
+		$discount = (float) $cart->get_discount_total() + ( $incl ? (float) $cart->get_discount_tax() : 0.0 );
+		$tax      = (float) $cart->get_total_tax();
+		$coupons  = $cart->get_applied_coupons();
 		return array(
 			'subtotal'    => $this->format_amount( $cart->get_subtotal() ),
 			'grand_total' => $this->format_amount( $cart->get_total( 'edit' ) ),
+			'breakdown'   => array(
+				'basis'          => $incl ? 'incl' : 'excl',
+				'subtotal'       => $this->format_amount( $subtotal ),
+				'shipping'       => $has_ship ? $this->format_amount( $shipping ) : null,
+				'shipping_label' => '',
+				'discount'       => $discount > 0.0001 ? $this->format_amount( -$discount ) : null,
+				'discount_label' => '',
+				'tax'            => $tax > 0.0001 ? $this->format_amount( $tax ) : null,
+				'coupon_code'    => array() !== $coupons ? strtoupper( (string) reset( $coupons ) ) : null,
+				'grand_total'    => $this->format_amount( $cart->get_total( 'edit' ) ),
+			),
 		);
 	}
 

@@ -112,6 +112,7 @@ class Idea89_Plugin {
 		require_once IDEA89_PLUGIN_DIR . 'includes/orders/class-idea89-order-endpoints.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/checkout/class-idea89-checkout-rest.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/acp/class-idea89-acp-feed.php';
+		require_once IDEA89_PLUGIN_DIR . 'includes/product/class-idea89-product-gallery.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/class-idea89-hooks.php';
 		require_once IDEA89_PLUGIN_DIR . 'includes/functions.php';
 
@@ -125,6 +126,7 @@ class Idea89_Plugin {
 		idea89_locator_page()->register();
 		idea89_checkout_rest()->register();
 		idea89_acp_feed()->register();
+		idea89_product_gallery()->register();
 
 		// The dashboard settings cache is keyed to nothing but the store, so
 		// changing which store this site points at must drop it immediately

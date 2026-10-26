@@ -5,7 +5,7 @@ Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.5.0
+Stable tag: 1.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -139,6 +139,15 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 
 == Changelog ==
 
+= 1.6.0 =
+* **Product image gallery in the chat.** When a shopper presses the enlarge button on a product card, the chat asks your shop for that product's other images (at most 12, published products only) and shows them as a gallery. Nothing is asked for until someone presses the button.
+* **Terms and conditions in the in-chat checkout.** If your checkout has the terms tick box on, the chat shows it too and will not place the order until it is ticked, as WooCommerce's own checkout does.
+* **Phone numbers by your checkout's own rules.** A required phone number is asked for in the chat, and a number with letters in it is refused before the order is placed.
+* **The in-chat checkout remembers the shopper's details** after a page refresh or a visit to your own checkout page.
+* **Discount codes in the in-chat checkout**, using WooCommerce's own coupon rules, one code at a time.
+* **Full order totals in the in-chat checkout**: subtotal, delivery, discount, tax and total, on your shop's own tax display setting.
+* Details a shopper typed in the chat carry over if they move to your own checkout page.
+
 = 1.5.0 =
 * **Load with Subresource Integrity** (Settings > Appearance, off by default). The widget then loads from a fixed copy whose address is the SHA-384 of its contents, with an `integrity` hash and `crossorigin="anonymous"` on the script tag, so the browser refuses it if it is ever altered on the way. Security scanners and PCI DSS 6.4.3 reviews flag every third-party script without one. If IDEA89 cannot be reached, the widget loads as before. With it on, dashboard changes reach your storefront within the hour, and when your page cache refreshes if you use one.
 * **Fixed:** with Checkout in chat, a second chat launcher no longer appears over the checkout form inside the chat panel.
@@ -212,6 +221,9 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 * Initial release. Catalogue, category, page, coupon, FAQ and content sync; storefront chat widget with WooCommerce Store API add-to-cart; admin settings with Test Connection and Sync Now.
 
 == Upgrade Notice ==
+
+= 1.6.0 =
+Adds a product image gallery, terms and conditions, phone rules, discount codes and full totals to the in-chat checkout. No settings to change.
 
 = 1.5.0 =
 Adds an optional "Load with Subresource Integrity" setting for stores whose security scans or PCI DSS reviews ask for an integrity hash on third-party scripts. Off by default; nothing changes until you turn it on.
