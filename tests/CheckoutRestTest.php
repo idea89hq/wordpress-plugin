@@ -375,6 +375,14 @@ class Idea89_Fake_WC_Order {
 	public function get_currency() {
 		return $this->data['currency'];
 	}
+
+	/** @var array<int, array{0: string, 1: string}> */
+	public $status_updates = array();
+
+	public function update_status( $status, $note = '' ) {
+		$this->status_updates[] = array( $status, $note );
+		$this->data['status']   = $status;
+	}
 }
 
 /**
@@ -1312,6 +1320,24 @@ class CheckoutRestTest extends TestCase {
 
 		$this->assertSame( 402, $response->get_status() );
 		$this->assertArrayNotHasKey( 'order_id', $response->get_data() );
+	}
+
+	public function test_place_cancels_and_refuses_an_order_the_gateway_left_unpaid() {
+		// A gateway that takes payment elsewhere (a redirect to a hosted
+		// payment page) returns success but leaves the order pending.
+		$this->with_options( array( 'idea89_checkout_native_methods' => array( 'cod' ) ) );
+		$this->cart->empty                     = false;
+		$this->customer->data['billing_email'] = 'shopper@example.test';
+		$pending = new Idea89_Fake_WC_Order( array( 'status' => 'pending' ) );
+		Functions\when( 'wc_get_order' )->justReturn( $pending );
+
+		$response = $this->rest()->handle_place( $this->request_with_body( array( 'payment_method' => 'cod' ) ) );
+		$data     = $response->get_data();
+
+		$this->assertSame( 402, $response->get_status() );
+		$this->assertSame( 'payment_failed', $data['error'] );
+		$this->assertArrayNotHasKey( 'order_id', $data );
+		$this->assertSame( 'cancelled', $pending->status_updates[0][0] );
 	}
 
 	public function test_place_reports_the_post_payment_status() {

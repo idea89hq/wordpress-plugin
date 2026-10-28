@@ -784,6 +784,19 @@ class Idea89_Checkout_Rest {
 				return $this->error_response( 'payment_failed', __( 'We could not take payment for your order. Please try again or choose another payment method.', 'idea89-ai-shopping-assistant' ), 402 );
 			}
 
+			// Still pending after a "success": the gateway takes payment
+			// somewhere else (a card form or a redirect to a hosted payment
+			// page) that this flow never sends the shopper to. Reporting it
+			// as confirmed leaves an unpaid order the shopper thinks is paid,
+			// as seen live with a Stripe redirect on the Magento arm. Cancel
+			// it, so stock is released, and send the shopper to the checkout.
+			if ( 'pending' === $status ) {
+				if ( method_exists( $order, 'update_status' ) ) {
+					$order->update_status( 'cancelled', __( 'Cancelled by the IDEA89 assistant: this payment method takes payment on the checkout page, which the in-chat checkout cannot do.', 'idea89-ai-shopping-assistant' ) );
+				}
+				return $this->error_response( 'payment_failed', __( 'This payment method needs the full checkout page. Please use the checkout page to pay.', 'idea89-ai-shopping-assistant' ), 402 );
+			}
+
 			return new WP_REST_Response(
 				array(
 					'order_id' => (string) $order->get_order_number(),

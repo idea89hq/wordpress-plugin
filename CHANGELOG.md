@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-10-28
+
+### Fixed
+- **The in-chat checkout no longer reports an unpaid order as confirmed.** If an
+  allowed gateway reports success but leaves the order `pending` (it takes payment
+  on another page, such as a hosted card form or a redirect), the order is
+  cancelled, which releases its stock, and the shopper is asked to pay on the
+  checkout page. Previously the chat said "Order confirmed" for an order that had
+  not been paid.
+
 ## [1.6.0] - 2026-10-26
 
 ### Added

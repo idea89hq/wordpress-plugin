@@ -5,7 +5,7 @@ Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.6.0
+Stable tag: 1.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -139,6 +139,9 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 
 == Changelog ==
 
+= 1.6.1 =
+* **Fixed:** the in-chat checkout no longer says "Order confirmed" for an order that has not been paid. If a payment method needs your own checkout page to take the payment (a card form or a redirect), the order is cancelled, its stock is released, and the shopper is asked to pay on the checkout page.
+
 = 1.6.0 =
 * **Product image gallery in the chat.** When a shopper presses the enlarge button on a product card, the chat asks your shop for that product's other images (at most 12, published products only) and shows them as a gallery. Nothing is asked for until someone presses the button.
 * **Terms and conditions in the in-chat checkout.** If your checkout has the terms tick box on, the chat shows it too and will not place the order until it is ticked, as WooCommerce's own checkout does.
@@ -221,6 +224,9 @@ Yes, compatibility is declared explicitly, so the plugin works correctly with Wo
 * Initial release. Catalogue, category, page, coupon, FAQ and content sync; storefront chat widget with WooCommerce Store API add-to-cart; admin settings with Test Connection and Sync Now.
 
 == Upgrade Notice ==
+
+= 1.6.1 =
+Fixes the in-chat checkout confirming an order that a payment method had left unpaid. No settings to change.
 
 = 1.6.0 =
 Adds a product image gallery, terms and conditions, phone rules, discount codes and full totals to the in-chat checkout. No settings to change.
